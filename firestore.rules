@@ -64,15 +64,19 @@ service cloud.firestore {
       match /plans/{id} {
         allow read: if tmCoach(c) || tmOwnDoc(c);
         allow create, delete: if tmCoach(c);
+        allow delete: if tmOwnDoc(c); // players can erase their own data
         allow update: if tmCoach(c) || (tmOwnDoc(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ticks']));
       }
       match /feedback/{id} {
         allow read: if tmCoach(c) || tmOwnDoc(c);
         allow create, delete: if tmCoach(c);
+        allow delete: if tmOwnDoc(c);
         allow update: if tmCoach(c) || (tmOwnDoc(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ack']) && request.resource.data.ack == true);
       }
-      match /attendance/{id} { allow read: if tmCoach(c) || tmOwnDoc(c); allow write: if tmCoach(c); }
-      match /stats/{id} { allow read: if tmCoach(c) || (tmMember(c) && id == request.auth.uid); allow write: if tmCoach(c); }
+      match /attendance/{id} { allow read: if tmCoach(c) || tmOwnDoc(c); allow write: if tmCoach(c); allow delete: if tmOwnDoc(c); }
+      match /stats/{id} { allow read: if tmCoach(c) || (tmMember(c) && id == request.auth.uid); allow write: if tmCoach(c); allow delete: if tmMember(c) && id == request.auth.uid; }
+      // the club owner can delete anything in their club (used when deleting the club)
+      match /{sub}/{id} { allow delete: if tmOwner(c); }
     }
   }
 }

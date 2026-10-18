@@ -6,6 +6,8 @@
 const FIREBASE_CONFIG = window.TEAM_FIREBASE_CONFIG || {};
 const CONFIG_READY = !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && !/PASTE/.test(FIREBASE_CONFIG.apiKey));
 const FB_VER = "12.19.0";
+// Bump this when the privacy policy or terms change in a way people need to agree to again
+const LEGAL_VERSION = "2026-10-18";
 // Gemini models for the food estimate, tried in order (the alias keeps working as Google releases new versions)
 const AI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash"];
 const FB_BASE = window.TEAM_FB_BASE || `https://www.gstatic.com/firebasejs/${FB_VER}`;
@@ -73,6 +75,7 @@ let F = null;            // { auth, db, a (auth module), f (firestore module) }
 let unsubs = [];
 let pendingJoin = cleanCode(new URLSearchParams(location.search).get("join"));
 let pendingName = ""; // name typed at sign-up, used when the profile is first created
+let pendingConsent = null; // consent given on the sign-up form, saved with the new profile
 
 function resetClubData() {
   Object.assign(S, { club: null, role: null, members: [], sessions: [], announcements: [], plans: [], feedback: [], days: {}, att: {}, stats: {}, targets: {}, rsvp: {}, view: null, focus: null, preview: null, err: "" });
@@ -166,19 +169,25 @@ async function boot() {
     if (!u) { S.profile = null; S.phase = "auth"; render(); return; }
     S.phase = "loading"; render();
     try { await loadProfile(); } catch (e) { console.error(e); S.phase = "clubs"; S.err = fsErr(e); render(); return; }
-    if (pendingJoin) { S.phase = "clubs"; render(); openJoin(pendingJoin); return; }
-    const last = store.get("team.lastClub." + u.uid);
-    const clubs = S.profile.clubs || [];
-    if (last && clubs.includes(last)) return openClub(last);
-    if (clubs.length === 1) return openClub(clubs[0]);
-    S.phase = "clubs"; render();
+    afterProfile();
   });
+}
+const consentOk = p => !!(p && p.consent && p.consent.version === LEGAL_VERSION);
+function afterProfile() {
+  if (!consentOk(S.profile)) { S.phase = "consent"; render(); return; }
+  if (pendingJoin) { S.phase = "clubs"; render(); openJoin(pendingJoin); return; }
+  const last = store.get("team.lastClub." + S.user.uid);
+  const clubs = S.profile.clubs || [];
+  if (last && clubs.includes(last)) return openClub(last);
+  if (clubs.length === 1) return openClub(clubs[0]);
+  S.phase = "clubs"; render();
 }
 let profileUnsub = null;
 async function loadProfile() {
   const u = S.user; const ref = D("users", u.uid);
   const snap = await F.f.getDoc(ref);
   if (!snap.exists()) await F.f.setDoc(ref, { name: pendingName || u.displayName || (u.email || "").split("@")[0], email: u.email || "", created: TODAY }, { merge: true });
+  if (pendingConsent) { await F.f.setDoc(ref, { consent: pendingConsent }, { merge: true }); pendingConsent = null; }
   const first = await F.f.getDoc(ref); S.profile = first.data();
   if (profileUnsub) profileUnsub();
   profileUnsub = F.f.onSnapshot(ref, s => { if (s.exists()) { S.profile = s.data(); if (S.phase === "clubs") { loadClubNames(); queueRender(); } } });
@@ -194,7 +203,7 @@ async function loadClubNames() {
 }
 async function doSignOut() {
   closeModal(); stopClub(); if (profileUnsub) { profileUnsub(); profileUnsub = null; }
-  S.clubNames = {}; S.authMode = "signin"; S.authMsg = null; pendingJoin = ""; pendingName = "";
+  S.clubNames = {}; S.authMode = "signin"; S.authMsg = null; pendingJoin = ""; pendingName = ""; pendingConsent = null;
   await F.a.signOut(F.auth);
 }
 
@@ -427,6 +436,7 @@ function render() {
   if (S.phase === "boot" || S.phase === "loading") { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, el("div", { class: "crest" }, "TL"), el("h2", {}, S.phase === "boot" ? "Touchline Team" : "Opening the clubhouse"), el("p", { class: "muted" }, "Loading…")))); return; }
   if (S.phase === "auth") { app.replaceChildren(authPage()); return; }
   if (S.phase === "clubs") { app.replaceChildren(clubsPage()); return; }
+  if (S.phase === "consent") { app.replaceChildren(consentPage()); return; }
   if (!S.club || !me()) { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, el("div", { class: "crest" }, "TL"), el("h2", {}, "Opening the clubhouse"), el("p", { class: "muted" }, "Loading your squad…")))); return; }
   const coach = isCoach();
   const tabs = coach ? [["today", "Today"], ["squad", "Squad"], ["schedule", "Schedule"], ["board", "Board"]] : [["home", "Home"], ["log", "My log"], ["me", "My season"], ["board", "Board"]];
@@ -468,7 +478,8 @@ function authPage() {
       else if (mode === "signup") {
         const name = String(fd.get("name") || "").trim();
         if (pw !== fd.get("password2")) throw { code: "app/mismatch" };
-        pendingName = name; const code = cleanCode(fd.get("code")); if (code) pendingJoin = code;
+        const consent = readConsent(fd); if (consent.error) throw { code: "app/consent", message: consent.error };
+        pendingName = name; pendingConsent = consent; const code = cleanCode(fd.get("code")); if (code) pendingJoin = code;
         const cred = await F.a.createUserWithEmailAndPassword(F.auth, email, pw);
         await F.a.updateProfile(cred.user, { displayName: name }).catch(() => {});
       } else {
@@ -476,8 +487,10 @@ function authPage() {
         S.authMsg = { ok: "Check your inbox for a link to reset your password. It can take a minute, and may land in spam." }; render(); return;
       }
     } catch (ex) {
-      S.authMsg = { err: ex.code === "app/mismatch" ? "The two passwords don’t match." : authErr(ex) };
-      render();
+      S.authMsg = { err: ex.code === "app/mismatch" ? "The two passwords don’t match." : ex.code === "app/consent" ? ex.message : authErr(ex) };
+      if (mode === "signup") pendingConsent = null;
+      // show the message without redrawing, so passwords and ticked boxes stay filled in
+      ok.hidden = true; err.textContent = S.authMsg.err; err.hidden = false; err.scrollIntoView({ block: "nearest", behavior: "smooth" });
     } finally { btn.disabled = false; }
   };
   const inputs = [];
@@ -487,6 +500,7 @@ function authPage() {
   if (mode === "signup") {
     inputs.push(field("Repeat password", el("input", { id: "a-pw2", name: "password2", type: "password", required: true, minlength: 6, autocomplete: "new-password" })));
     inputs.push(field("Club code (players, optional)", el("input", { id: "a-code", name: "code", value: pendingJoin || "", autocomplete: "off", placeholder: "e.g. K7P2QX", style: "text-transform:uppercase" })));
+    inputs.push(consentFields());
   }
   const titles = { signin: "Sign in", signup: "Create your account", reset: "Reset your password" };
   return el("div", { class: "auth" }, el("div", { class: "auth-card" },
@@ -499,7 +513,144 @@ function authPage() {
     mode === "signin" ? el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: () => setMode("reset") }, "Forgot password?"), el("span", { class: "muted", style: "font-size:14px" }, "New here? ", el("button", { class: "linkish", onclick: () => setMode("signup") }, "Create an account")))
       : el("div", {}, el("button", { class: "linkish", onclick: () => setMode("signin") }, "← Back to sign in")),
     el("div", { class: "divider" }, "or"),
-    el("button", { class: "btn", style: "justify-content:center", onclick: startDemo }, "Look around a demo team first")));
+    el("button", { class: "btn", style: "justify-content:center", onclick: startDemo }, "Look around a demo team first"),
+    legalLinks()));
+}
+
+/* ---------- legal: consent, links, data export, deleting accounts and clubs ---------- */
+function legalLinks() {
+  return el("div", { class: "legal-links" }, el("a", { href: "privacy.html", target: "_blank", rel: "noopener" }, "Privacy policy"), el("span", { "aria-hidden": "true" }, "·"), el("a", { href: "terms.html", target: "_blank", rel: "noopener" }, "Terms of use"));
+}
+function consentFields() {
+  const guardian = el("div", { class: "guardian", hidden: true },
+    el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Because you’re under 16, a parent or guardian needs to agree. Please fill this in together with them."),
+    field("Parent or guardian’s name", el("input", { id: "c-gname", name: "gname", autocomplete: "off", maxlength: 80 })),
+    field("Parent or guardian’s email", el("input", { id: "c-gemail", name: "gemail", type: "email", autocomplete: "off", maxlength: 120 })),
+    el("label", { class: "check" }, el("input", { type: "checkbox", name: "gok", id: "c-gok" }), el("span", {}, "I’m this player’s parent or guardian. I’ve read the privacy policy and I agree to them using Touchline Team.")));
+  const age = el("div", { class: "field" }, el("span", {}, "Your age"), seg("age", [["adult", "16 or older"], ["child", "Under 16"]], ""));
+  age.addEventListener("change", e => { if (e.target.name === "age") guardian.hidden = e.target.value !== "child"; });
+  return el("div", { class: "consent" }, age, guardian,
+    el("label", { class: "check" }, el("input", { type: "checkbox", name: "share", id: "c-share" }), el("span", {}, "I agree that what I log (meals, nutrition, workouts and availability) can be seen by the coaches of clubs I join.")),
+    el("label", { class: "check" }, el("input", { type: "checkbox", name: "terms", id: "c-terms" }), el("span", {}, "I agree to the ", el("a", { href: "terms.html", target: "_blank", rel: "noopener" }, "Terms of use"), " and I’ve read the ", el("a", { href: "privacy.html", target: "_blank", rel: "noopener" }, "Privacy policy"), ".")));
+}
+function readConsent(fd) {
+  const age = fd.get("age");
+  if (!age) return { error: "Tell us whether you’re 16 or older, or under 16." };
+  const out = { version: LEGAL_VERSION, at: new Date().toISOString(), adult: age === "adult", share: true, terms: true };
+  if (age === "child") {
+    const gname = String(fd.get("gname") || "").trim(), gemail = String(fd.get("gemail") || "").trim();
+    if (!gname || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(gemail)) return { error: "Players under 16 need a parent or guardian’s name and email." };
+    if (!fd.get("gok")) return { error: "Your parent or guardian needs to tick the box to agree." };
+    out.guardianName = gname; out.guardianEmail = gemail;
+  }
+  if (!fd.get("share")) return { error: "Please agree to coaches seeing what you log. The app can’t work for a club without it." };
+  if (!fd.get("terms")) return { error: "Please agree to the Terms of use and Privacy policy to continue." };
+  return out;
+}
+function consentPage() {
+  const err = el("div", { class: "err", hidden: !S.authMsg?.err }, S.authMsg?.err || "");
+  const updated = !!S.profile?.consent;
+  return el("div", { class: "auth" }, el("div", { class: "auth-card" },
+    el("div", { class: "auth-brand" }, el("div", { class: "crest" }, "TL"), el("div", {}, el("h1", {}, updated ? "We’ve updated our terms" : "Before you start"), el("p", {}, S.user?.email || ""))),
+    el("p", { style: "margin:0" }, updated ? "Please read the updated privacy policy and terms and agree to continue." : "Please confirm a few things so we can look after your data properly."),
+    err,
+    el("form", { onsubmit: async e => {
+      e.preventDefault(); const c = readConsent(new FormData(e.currentTarget));
+      if (c.error) { S.authMsg = { err: c.error }; render(); return; }
+      try { await F.f.setDoc(D("users", S.user.uid), { consent: c }, { merge: true }); S.profile = { ...S.profile, consent: c }; S.authMsg = null; afterProfile(); }
+      catch (ex) { S.authMsg = { err: fsErr(ex) }; render(); }
+    } }, consentFields(), el("button", { class: "btn primary" }, "Continue")),
+    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: doSignOut }, "Sign out"), el("button", { class: "linkish", style: "color:var(--bad)", onclick: openDeleteAccount }, "Delete my account")),
+    legalLinks()));
+}
+
+const MEMBER_DATA = ["logs", "rsvp", "plans", "feedback", "attendance"];
+const CLUB_SUBS = ["sessions", "announcements", "registers", "logs", "rsvp", "plans", "feedback", "attendance", "stats"];
+async function exportMyData() {
+  const f = F.f; const uid = S.user.uid;
+  toast("Gathering your data…");
+  try {
+    const out = { exported: new Date().toISOString(), app: "Touchline Team", account: { uid, email: S.user.email }, profile: S.profile, clubs: [] };
+    for (const id of S.profile?.clubs || []) {
+      const c = { clubId: id };
+      try {
+        const club = await f.getDoc(D("clubs", id)); c.club = club.exists() ? { name: club.data().name, sport: club.data().sport, season: club.data().season } : null;
+        const mem = await f.getDoc(D("clubs", id, "members", uid)); c.membership = mem.exists() ? mem.data() : null;
+        for (const col of MEMBER_DATA) c[col] = (await f.getDocs(f.query(Col("clubs", id, col), f.where("uid", "==", uid)))).docs.map(d => ({ id: d.id, ...d.data() }));
+        const st = await f.getDoc(D("clubs", id, "stats", uid)); c.stats = st.exists() ? st.data() : null;
+      } catch (e) { c.error = "Couldn’t read this club (you may no longer be a member)."; }
+      out.clubs.push(c);
+    }
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+    const a = el("a", { href: URL.createObjectURL(blob), download: `touchline-team-my-data-${TODAY}.json` }); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast("Your data has been downloaded");
+  } catch (e) { console.error(e); toast(fsErr(e)); }
+}
+async function deleteInBatches(refs) {
+  for (let i = 0; i < refs.length; i += 400) { const b = F.f.writeBatch(F.db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit(); }
+}
+async function deleteClubData(id, joinCode) {
+  const f = F.f; const uid = S.user.uid;
+  for (const col of CLUB_SUBS) await deleteInBatches((await f.getDocs(Col("clubs", id, col))).docs.map(d => d.ref));
+  if (joinCode) await f.deleteDoc(D("joinCodes", joinCode)).catch(() => {});
+  const mems = (await f.getDocs(Col("clubs", id, "members"))).docs;
+  await deleteInBatches(mems.filter(d => d.id !== uid).map(d => d.ref));
+  await f.deleteDoc(D("clubs", id, "members", uid));
+  await f.deleteDoc(D("clubs", id));
+  await f.updateDoc(D("users", uid), { clubs: f.arrayRemove(id) }).catch(() => {});
+}
+async function deleteMyClubData(id) {
+  const f = F.f; const uid = S.user.uid;
+  const mine = col => f.getDocs(f.query(Col("clubs", id, col), f.where("uid", "==", uid))).then(s => s.docs.map(d => d.ref)).catch(() => []);
+  const refs = []; for (const col of MEMBER_DATA) refs.push(...await mine(col));
+  await deleteInBatches(refs);
+  await f.deleteDoc(D("clubs", id, "stats", uid)).catch(() => {});
+  // messages this person wrote as a coach stay with the club, without their name
+  for (const col of ["feedback", "announcements"]) {
+    const s = await f.getDocs(f.query(Col("clubs", id, col), f.where("authorUid", "==", uid))).catch(() => null);
+    if (s) for (const d of s.docs) await f.updateDoc(d.ref, { author: "Former coach", authorUid: null }).catch(() => {});
+  }
+  await f.deleteDoc(D("clubs", id, "members", uid)).catch(() => {});
+}
+function openDeleteClub() {
+  const name = S.club?.name || "this club";
+  modal("Delete " + name, [
+    el("p", { style: "margin:0" }, `This permanently deletes ${name} and everything in it: the squad list, sessions, registers, ratings, plans, feedback, announcements and every player’s logs. Players keep their accounts but lose access. This can’t be undone.`),
+    field("Type the club name to confirm", el("input", { id: "dc-name", name: "name", required: true, autocomplete: "off" })),
+  ], { label: "Delete club", submit: async fd => {
+    if (fd.get("name").trim() !== S.club.name) { toast("The name doesn’t match"); return false; }
+    const id = S.clubId, code = S.club.joinCode;
+    try { stopClub(); S.phase = "loading"; render(); await deleteClubData(id, code); delete S.clubNames[id]; store.del("team.lastClub." + S.user.uid); S.phase = "clubs"; render(); toast(`${name} has been deleted`); return true; }
+    catch (e) { console.error(e); S.phase = "clubs"; render(); toast(fsErr(e)); return false; }
+  } });
+}
+async function openDeleteAccount() {
+  const uid = S.user.uid; const owned = [];
+  for (const id of S.profile?.clubs || []) { try { const c = await F.f.getDoc(D("clubs", id)); if (c.exists() && c.data().ownerUid === uid) owned.push({ id, ...c.data() }); } catch {} }
+  modal("Delete my account", [
+    el("p", { style: "margin:0" }, "This permanently deletes your account, your profile and everything you’ve logged: meals, workouts, availability, and the plans, feedback, attendance, ratings and stats your coaches recorded about you. Messages you wrote to a club as a coach stay with the club without your name. This can’t be undone."),
+    owned.length ? el("div", { class: "err" }, `You own ${owned.map(c => c.name).join(", ")}. Deleting your account also deletes ${owned.length > 1 ? "these clubs" : "this club"} and all ${owned.length > 1 ? "their" : "its"} data for every member. To keep a club going, contact us first to make someone else the owner.`) : null,
+    el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Want a copy first? ", el("button", { type: "button", class: "linkish", onclick: exportMyData }, "Download my data")),
+    field("Enter your password to confirm", el("input", { id: "da-pw", name: "pw", type: "password", required: true, autocomplete: "current-password" })),
+  ], { label: "Delete my account", submit: async fd => {
+    const a = F.a;
+    try { await a.reauthenticateWithCredential(S.user, a.EmailAuthProvider.credential(S.user.email, fd.get("pw"))); }
+    catch (e) { toast(authErr(e)); return false; }
+    try {
+      stopClub(); S.phase = "loading"; render();
+      for (const id of S.profile?.clubs || []) {
+        const c = owned.find(o => o.id === id);
+        try { if (c) await deleteClubData(id, c.joinCode); else await deleteMyClubData(id); } catch (e) { console.warn("club cleanup", id, e); }
+      }
+      if (profileUnsub) { profileUnsub(); profileUnsub = null; }
+      await F.f.deleteDoc(D("users", uid));
+      store.del("team.lastClub." + uid);
+      await a.deleteUser(S.user);
+      closeModal(); S.authMode = "signin"; S.authMsg = { ok: "Your account and data have been deleted." }; S.phase = "auth"; render();
+      return true;
+    } catch (e) { console.error(e); S.phase = "clubs"; render(); toast(fsErr(e)); return false; }
+  } });
 }
 
 /* ---------- my clubs page ---------- */
@@ -512,13 +663,16 @@ function clubsPage() {
     el("div", { class: "stack", style: "gap:8px" },
       el("button", { class: "btn primary", style: "justify-content:center", onclick: () => openJoin("") }, "Join a club with a code"),
       el("button", { class: "btn", style: "justify-content:center", onclick: openCreate }, "Create a club (coaches)")),
-    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: openProfileEdit }, "Edit my name"), el("button", { class: "linkish", onclick: doSignOut }, "Sign out"))));
+    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: openProfileEdit }, "Edit my name"), el("button", { class: "linkish", onclick: doSignOut }, "Sign out")),
+    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: exportMyData }, "Download my data"), el("button", { class: "linkish", style: "color:var(--bad)", onclick: openDeleteAccount }, "Delete my account")),
+    legalLinks()));
 }
 function openCreate() {
   modal("Create your club", [
     el("p", { class: "muted", style: "margin:0" }, "You’ll be the head coach. Afterwards you’ll get a code to share with your players."),
     ...clubFields(null),
     field("Your name, as players will see it", el("input", { id: "c-coach", name: "coach", required: true, value: S.profile?.name || "", placeholder: "e.g. Coach Sam Patel" })),
+    el("label", { class: "check" }, el("input", { type: "checkbox", name: "organiser", required: true }), el("span", {}, "I’m allowed to set this up for my club or team, and I’ll make sure players (and parents of players under 16) know what the app records and who can see it.")),
   ], { label: "Create club", submit: async fd => {
     try { const id = await createClub({ name: fd.get("name").trim(), sport: fd.get("sport"), season: fd.get("season").trim() }, fd.get("coach").trim()); closeModal(); await openClub(id); S.view = "squad"; render(); toast("Club created. Share the code with your players."); return true; }
     catch (e) { console.error(e); toast(fsErr(e)); return false; }
@@ -562,6 +716,8 @@ function openAccount() {
       el("button", { type: "button", class: "btn", onclick: () => { closeModal(); stopClub(); S.phase = "clubs"; loadClubNames(); render(); } }, "My clubs · join or create another"),
       !owner ? el("button", { type: "button", class: "btn danger", onclick: () => confirmDel(`Leave ${S.club.name}? Your coach will no longer see your logs.`, leaveClub, "Leave club") }, "Leave this club") : null,
       el("button", { type: "button", class: "btn", onclick: doSignOut }, "Sign out")),
+    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { type: "button", class: "linkish", onclick: exportMyData }, "Download my data"), el("button", { type: "button", class: "linkish", style: "color:var(--bad)", onclick: () => { closeModal(); openDeleteAccount(); } }, "Delete my account")),
+    legalLinks(),
   ]);
 }
 
@@ -821,6 +977,8 @@ async function shrinkImage(file, max = 1024) {
     return { dataUrl, base64: dataUrl.split(",")[1] };
   } finally { URL.revokeObjectURL(url); }
 }
+// Food scanning sends content to Google's AI, so it's only offered to people who said they're 16 or older
+const canScan = () => S.demo || S.profile?.consent?.adult === true;
 function addMeal() {
   const hr = new Date().getHours();
   let photo = null, aiSource = null;
@@ -857,11 +1015,11 @@ function addMeal() {
   });
   modal("Log a meal", [
     el("div", { class: "fields2" }, field("Meal", sel("f-kind", "kind", MEALS, hr < 11 ? "Breakfast" : hr < 16 ? "Lunch" : "Dinner")), field("Date", el("input", { id: "f-date", type: "date", name: "date", value: TODAY, max: TODAY, required: true }))),
-    el("div", { class: "scan-row" }, photoBtn, textBtn, fileIn), preview, status,
+    canScan() ? el("div", { class: "scan-row" }, photoBtn, textBtn, fileIn) : el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Photo and description scanning is available for players aged 16 and over. Fill in the numbers below, or ask a parent or coach to help."), preview, status,
     field("What did you eat?", text),
     result,
     el("div", { class: "field" }, el("span", {}, "Nutrition (fill in or let the scanner do it)"), el("div", { class: "fields2 macro-inputs" }, MACROS.map(([k, l, u]) => field(`${l} (${u})`, nums[k])))),
-    el("p", { class: "muted", style: "margin:0;font-size:12px" }, "Photos are only used to work out the numbers. They aren’t saved."),
+    el("p", { class: "muted", style: "margin:0;font-size:12px" }, "Scanning sends the photo or description to Google’s Gemini AI to work out the numbers. We don’t save photos. Numbers are estimates, not medical or dietary advice."),
   ], { submit: async fd => {
     const d = Object.fromEntries(fd.entries()); const date = d.date && d.date <= TODAY ? d.date : TODAY;
     const item = { id: rid(), kind: d.kind, text: d.text.trim(), ts: Date.now(), ai: aiSource };
@@ -918,7 +1076,8 @@ function vSquad() {
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, `Players (${players().length})`)), players().length ? el("ul", { class: "list" }, players().map(row)) : el("div", { class: "empty" }, "No players yet. Share the code above.")),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Coaching staff")), el("ul", { class: "list" }, coaches().map(row))),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Club"), owner ? el("button", { class: "btn small", onclick: openClubEdit }, "Edit club") : null),
-      el("div", { class: "muted" }, `${S.club?.name || ""} · ${sport().label} · Season ${S.club?.season || "—"}`)),
+      el("div", { class: "muted" }, `${S.club?.name || ""} · ${sport().label} · Season ${S.club?.season || "—"}`),
+      isOwner() ? el("div", { class: "row", style: "margin-top:12px" }, el("button", { class: "btn small danger", onclick: openDeleteClub }, "Delete club and all its data")) : null),
   ];
 }
 function editMember(m, self) {
