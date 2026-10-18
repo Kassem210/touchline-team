@@ -22,7 +22,8 @@ Plain HTML, CSS and JavaScript. No build step.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | Page shell |
+| `index.html` | The front page that sells the app (features, privacy, pricing, FAQ) |
+| `app.html` | The app itself. `app.html?start=signup` opens sign-up, `app.html?start=demo` opens the demo team |
 | `style.css` | Styles |
 | `app.js` | The whole app |
 | `firebase-config.js` | Your Firebase project's web settings |
@@ -45,7 +46,7 @@ Optional: **Authentication → Templates** changes the password-reset email. **A
 ## Publish with GitHub Pages
 
 1. In this repository: **Settings → Pages** → **Deploy from a branch** → branch `main`, folder `/ (root)` → **Save**.
-2. A minute later it's live at `https://<your-username>.github.io/touchline-team/`.
+2. A minute later the front page is live at `https://<your-username>.github.io/touchline-team/` and the app at `.../touchline-team/app.html`.
 3. For your own domain, type it under **Custom domain** in the same page and add the DNS record your domain company asks for (a CNAME pointing to `<your-username>.github.io`), then tick **Enforce HTTPS**. Remember to add that domain to Firebase's authorized domains too.
 
 ## Run it locally

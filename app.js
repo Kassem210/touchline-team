@@ -74,6 +74,8 @@ const S = {
 let F = null;            // { auth, db, a (auth module), f (firestore module) }
 let unsubs = [];
 let pendingJoin = cleanCode(new URLSearchParams(location.search).get("join"));
+// links from the front page: app.html?start=signup or app.html?start=demo
+const START = new URLSearchParams(location.search).get("start");
 let pendingName = ""; // name typed at sign-up, used when the profile is first created
 let pendingConsent = null; // consent given on the sign-up form, saved with the new profile
 
@@ -159,10 +161,11 @@ function fsErr(e) {
 
 /* ---------- boot + auth ---------- */
 async function boot() {
-  render();
-  if (!CONFIG_READY && !EMU) { S.fbError = "This site isn’t connected to Firebase yet. The site owner needs to paste the project settings into firebase-config.js (see the README). You can still look around the demo team."; S.phase = "auth"; render(); return; }
+  if (START === "signup") S.authMode = "signup";
+  if (START === "demo") startDemo(); else render();
+  if (!CONFIG_READY && !EMU) { S.fbError = "This site isn’t connected to Firebase yet. The site owner needs to paste the project settings into firebase-config.js (see the README). You can still look around the demo team."; if (!S.demo) { S.phase = "auth"; render(); } return; }
   try { await initFirebase(); }
-  catch (e) { console.error(e); S.fbError = "Couldn’t load the sign-in service. Check your internet connection and reload the page."; S.phase = "auth"; render(); return; }
+  catch (e) { console.error(e); S.fbError = "Couldn’t load the sign-in service. Check your internet connection and reload the page."; if (!S.demo) { S.phase = "auth"; render(); } return; }
   F.a.onAuthStateChanged(F.auth, async u => {
     if (S.demo) return;
     stopClub(); S.user = u;
