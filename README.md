@@ -10,6 +10,19 @@ The app for sports teams and clubs: football, basketball, tennis, gymnastics or 
 - A demo team on the sign-in page lets anyone look around first.
 - **Legal basics**: privacy policy and terms pages; at sign-up everyone confirms their age, agrees to the terms and separately agrees to coaches seeing their logs; players under 16 need a parent or guardian's name, email and agreement; AI food scanning is only offered to people 16 and over; anyone can download all their data or delete their account; club owners can delete a club and everything in it. If you change the policy or terms, bump `LEGAL_VERSION` in `app.js` and everyone is asked to agree again.
 
+## Subscriptions ($20 a month per club)
+
+Every new club gets a 30-day free trial. After that the club needs a subscription, or it becomes read-only: members can still view, download and delete their data, but nothing new can be added. This is enforced by `firestore.rules`, so nobody can extend their own trial or mark themselves as paid. Clubs created before subscriptions existed stay free ("early access").
+
+How payments work, with no monthly costs:
+
+1. **Stripe** (free account, fees come out of each payment): create a product "Touchline Team club" with a recurring price of $20/month, then **Payment Links → New** for that price. In the link's settings, turn on "Don't show confirmation page" → redirect to your app URL if you like. Paste the link into `stripeLink` in `site-info.js`.
+2. **Customer portal**: Stripe → Settings → Billing → Customer portal → activate, then copy the login link into `stripePortal` in `site-info.js`. Club owners use it to change card, get invoices or cancel.
+3. **Make yourself admin**: sign up on the site, then in Firebase → Authentication copy your User UID. In Firestore → **Start collection** `admins` → Document ID = your UID → add any field (e.g. `ok` = true). Reload the app: the clubs page now shows **Admin: clubs and subscriptions**.
+4. **When someone pays**: Stripe emails you. The payment shows `client_reference_id`, which is the club reference. In the admin screen, search for it (or the owner's email) and press **+1 month** (or **+1 year**). Do the same for each monthly renewal email. If a club cancels, let the paid period run out, or press **End**.
+
+Later, a free Cloudflare Worker can listen to Stripe and do step 4 automatically.
+
 ## Before you open it to the public
 
 1. Fill in `site-info.js` (your name or business name, contact email, country, and your Firestore location). The legal pages show a yellow "Draft" warning until you do.

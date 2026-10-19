@@ -299,3 +299,8 @@ h2{font-size:26px} h3{font-size:20px}
 .legal .todo{background:var(--warn-soft);color:var(--warn);padding:0 4px;border-radius:4px;font-weight:600}
 .legal .back{display:inline-block;margin-bottom:18px;color:var(--accent);font-weight:600;text-decoration:none}
 .draft{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:12px 14px;font-weight:600;margin:12px 0}
+
+/* ---------- subscription ---------- */
+.banner.locked{background:var(--bad-soft);border-color:var(--bad)}
+.banner.locked b{color:var(--bad)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--surface-2);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}

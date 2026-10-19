@@ -5,5 +5,11 @@ window.TEAM_SITE = {
   email: "FILL IN: a contact email for privacy questions",
   country: "FILL IN: the country you operate from (e.g. England and Wales)",
   dataRegion: "FILL IN: your Firestore location (e.g. Europe, Belgium)",
-  updated: "18 October 2026",
+  updated: "19 October 2026",
+  // Subscription
+  price: "$20/month",
+  // Stripe → Payment Links → create a link for a $20/month recurring product, paste its URL here (https://buy.stripe.com/...)
+  stripeLink: "",
+  // Stripe → Settings → Billing → Customer portal → copy the login link (https://billing.stripe.com/p/login/...)
+  stripePortal: "",
 };

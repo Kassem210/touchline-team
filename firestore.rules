@@ -11,9 +11,25 @@ service cloud.firestore {
     function tmOwner(c) { return signedIn() && get(tmClub(c)).data.ownerUid == request.auth.uid; }
     function tmOwnDoc(c) { return tmMember(c) && resource.data.uid == request.auth.uid; }
     function tmMine(c) { return tmMember(c) && request.resource.data.uid == request.auth.uid; }
+    // The site owner. Add a document admins/<your uid> by hand in the Firebase console.
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
 
+    // Subscription: a club can add or change things during its 30-day trial or while it's paid up.
+    // Clubs created before billing existed have no createdAt and stay active.
+    // Deleting is always allowed, so people can remove their data even when a club is read-only.
+    function tmActive(c) {
+      let club = get(tmClub(c)).data;
+      return !('createdAt' in club)
+        || club.createdAt + duration.value(30, 'd') > request.time
+        || (club.get('paidUntil', null) != null && club.paidUntil > request.time);
+    }
+
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+    }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+      allow get: if isAdmin();
     }
     match /joinCodes/{code} {
       allow get: if signedIn();
@@ -21,18 +37,23 @@ service cloud.firestore {
       allow delete: if tmCoach(resource.data.club);
     }
     match /clubs/{c} {
-      allow read: if tmMember(c);
-      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if tmCoach(c) && request.resource.data.ownerUid == resource.data.ownerUid
-        && (request.resource.data.joinCode == resource.data.joinCode || tmOwner(c));
+      allow read: if tmMember(c) || isAdmin();
+      // the trial starts when the club is created; nobody can set their own payment date
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && !('paidUntil' in request.resource.data);
+      allow update: if (tmCoach(c)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid', 'createdAt', 'paidUntil', 'billingNote'])
+          && (request.resource.data.joinCode == resource.data.joinCode || tmOwner(c)))
+        || (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paidUntil', 'billingNote']));
       allow delete: if tmOwner(c);
 
       match /members/{uid} {
-        allow read: if tmMember(c);
+        allow read: if tmMember(c) || isAdmin();
         // the owner adds themself as head coach; everyone else joins as a player with a valid code
         allow create: if signedIn() && uid == request.auth.uid && request.resource.data.uid == uid && (
           (request.resource.data.role == 'coach' && tmOwner(c))
-          || (request.resource.data.role == 'player' && request.resource.data.code is string
+          || (request.resource.data.role == 'player' && tmActive(c) && request.resource.data.code is string
               && exists(/databases/$(database)/documents/joinCodes/$(request.resource.data.code))
               && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.code)).data.club == c));
         // players edit their own name, number and position; coaches edit anyone; only the owner changes roles
@@ -44,37 +65,60 @@ service cloud.firestore {
           || (tmCoach(c) && resource.data.role == 'player')
           || (tmOwner(c) && uid != request.auth.uid);
       }
-      match /sessions/{id} { allow read: if tmMember(c); allow write: if tmCoach(c); }
-      match /announcements/{id} { allow read: if tmMember(c); allow write: if tmCoach(c); }
-      match /registers/{id} { allow read, write: if tmCoach(c); }
+      match /sessions/{id} {
+        allow read: if tmMember(c);
+        allow create, update: if tmCoach(c) && tmActive(c);
+        allow delete: if tmCoach(c);
+      }
+      match /announcements/{id} {
+        allow read: if tmMember(c);
+        allow create: if tmCoach(c) && tmActive(c);
+        allow update: if tmCoach(c) && (tmActive(c) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['author', 'authorUid']));
+        allow delete: if tmCoach(c);
+      }
+      match /registers/{id} {
+        allow read: if tmCoach(c);
+        allow create, update: if tmCoach(c) && tmActive(c);
+        allow delete: if tmCoach(c);
+      }
 
       // private per-player data: the player and the club's coaches can read it
       match /logs/{id} {
         allow read: if tmCoach(c) || tmOwnDoc(c);
-        allow create: if tmMine(c) && id == request.auth.uid + '_' + request.resource.data.date;
-        allow update: if tmMine(c) && tmOwnDoc(c);
+        allow create: if tmMine(c) && tmActive(c) && id == request.auth.uid + '_' + request.resource.data.date;
+        allow update: if tmMine(c) && tmOwnDoc(c) && tmActive(c);
         allow delete: if tmOwnDoc(c);
       }
       match /rsvp/{id} {
         allow read: if tmCoach(c) || tmOwnDoc(c);
-        allow create: if tmMine(c) && id == request.resource.data.sid + '_' + request.auth.uid;
-        allow update: if tmMine(c) && tmOwnDoc(c);
+        allow create: if tmMine(c) && tmActive(c) && id == request.resource.data.sid + '_' + request.auth.uid;
+        allow update: if tmMine(c) && tmOwnDoc(c) && tmActive(c);
         allow delete: if tmOwnDoc(c);
       }
       match /plans/{id} {
         allow read: if tmCoach(c) || tmOwnDoc(c);
-        allow create, delete: if tmCoach(c);
-        allow delete: if tmOwnDoc(c); // players can erase their own data
-        allow update: if tmCoach(c) || (tmOwnDoc(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ticks']));
+        allow create: if tmCoach(c) && tmActive(c);
+        allow update: if tmActive(c) && (tmCoach(c) || (tmOwnDoc(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ticks'])));
+        allow delete: if tmCoach(c) || tmOwnDoc(c); // players can erase their own data
       }
       match /feedback/{id} {
         allow read: if tmCoach(c) || tmOwnDoc(c);
-        allow create, delete: if tmCoach(c);
-        allow delete: if tmOwnDoc(c);
-        allow update: if tmCoach(c) || (tmOwnDoc(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ack']) && request.resource.data.ack == true);
+        allow create: if tmCoach(c) && tmActive(c);
+        // coaches can always remove a departing coach's name from old messages
+        allow update: if (tmCoach(c) && (tmActive(c) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['author', 'authorUid'])))
+          || (tmActive(c) && tmOwnDoc(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ack']) && request.resource.data.ack == true);
+        allow delete: if tmCoach(c) || tmOwnDoc(c);
       }
-      match /attendance/{id} { allow read: if tmCoach(c) || tmOwnDoc(c); allow write: if tmCoach(c); allow delete: if tmOwnDoc(c); }
-      match /stats/{id} { allow read: if tmCoach(c) || (tmMember(c) && id == request.auth.uid); allow write: if tmCoach(c); allow delete: if tmMember(c) && id == request.auth.uid; }
+      match /attendance/{id} {
+        allow read: if tmCoach(c) || tmOwnDoc(c);
+        allow create, update: if tmCoach(c) && tmActive(c);
+        allow delete: if tmCoach(c) || tmOwnDoc(c);
+      }
+      match /stats/{id} {
+        allow read: if tmCoach(c) || (tmMember(c) && id == request.auth.uid);
+        allow create, update: if tmCoach(c) && tmActive(c);
+        allow delete: if tmCoach(c) || (tmMember(c) && id == request.auth.uid);
+      }
       // the club owner can delete anything in their club (used when deleting the club)
       match /{sub}/{id} { allow delete: if tmOwner(c); }
     }

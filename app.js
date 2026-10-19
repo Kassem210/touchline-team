@@ -7,7 +7,7 @@ const FIREBASE_CONFIG = window.TEAM_FIREBASE_CONFIG || {};
 const CONFIG_READY = !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && !/PASTE/.test(FIREBASE_CONFIG.apiKey));
 const FB_VER = "12.19.0";
 // Bump this when the privacy policy or terms change in a way people need to agree to again
-const LEGAL_VERSION = "2026-10-18";
+const LEGAL_VERSION = "2026-10-19";
 // Gemini models for the food estimate, tried in order (the alias keeps working as Google releases new versions)
 const AI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash"];
 const FB_BASE = window.TEAM_FB_BASE || `https://www.gstatic.com/firebasejs/${FB_VER}`;
@@ -172,6 +172,7 @@ async function boot() {
     if (!u) { S.profile = null; S.phase = "auth"; render(); return; }
     S.phase = "loading"; render();
     try { await loadProfile(); } catch (e) { console.error(e); S.phase = "clubs"; S.err = fsErr(e); render(); return; }
+    await checkAdmin();
     afterProfile();
   });
 }
@@ -262,11 +263,13 @@ function setDays(list) { const days = {}; list.forEach(d => ((days[d.uid] ||= {}
 function setRsvp(list) { const r = {}; list.forEach(x => ((r[x.sid] ||= {})[x.uid] = { going: x.going, reason: x.reason || "" })); S.rsvp = r; queueRender(); }
 
 /* ---------- actions (Firestore, or local in the demo) ---------- */
-async function act(fn, okMsg) {
+async function act(fn, okMsg, opts) {
   if (S.preview) { toast("This is a preview. Players make this change from their own account."); return false; }
+  if (!(opts && opts.always) && locked()) { toast(lockedMsg()); return false; }
   try { await fn(); if (okMsg) toast(okMsg); queueRender(); return true; }
   catch (e) { console.error(e); toast(fsErr(e)); return false; }
 }
+const ALWAYS = { always: true }; // allowed even when the club is read-only
 const myId = () => me().id;
 const cleanItem = o => JSON.parse(JSON.stringify(o)); // drops undefined values Firestore rejects
 
@@ -289,13 +292,13 @@ const A = {
     if (S.demo) { uids.forEach(uid => S.plans.push({ id: rid(), uid, ...base })); return; }
     const b = F.f.writeBatch(F.db); uids.forEach(uid => b.set(CD("plans", rid()), { uid, ...base })); await b.commit();
   }, uids.length > 1 ? `Plan sent to ${uids.length} players` : "Plan sent"),
-  deletePlan: p => act(async () => { if (S.demo) { S.plans = S.plans.filter(x => x !== p); return; } await F.f.deleteDoc(CD("plans", p.id)); }, "Plan deleted"),
+  deletePlan: p => act(async () => { if (S.demo) { S.plans = S.plans.filter(x => x !== p); return; } await F.f.deleteDoc(CD("plans", p.id)); }, "Plan deleted", ALWAYS),
   sendFb: (uid, kind, text) => act(async () => {
     const body = { uid, kind, text, author: me().name, authorUid: myId(), date: TODAY, ts: Date.now(), ack: false };
     if (S.demo) { S.feedback.push({ id: rid(), ...body }); return; }
     await F.f.setDoc(CD("feedback", rid()), body);
   }, "Sent to " + (byId(uid)?.name || "player")),
-  deleteFb: f => act(async () => { if (S.demo) { S.feedback = S.feedback.filter(x => x !== f); return; } await F.f.deleteDoc(CD("feedback", f.id)); }, "Deleted"),
+  deleteFb: f => act(async () => { if (S.demo) { S.feedback = S.feedback.filter(x => x !== f); return; } await F.f.deleteDoc(CD("feedback", f.id)); }, "Deleted", ALWAYS),
   saveStats: (uid, values) => act(async () => { if (S.demo) { S.stats[uid] = values; return; } await F.f.setDoc(CD("stats", uid), { uid, values, updated: TODAY }, { mergeFields: ["uid", "values", "updated"] }); }, "Stats updated"),
   saveTargets: (uid, targets) => act(async () => { if (S.demo) { S.targets[uid] = targets; return; } await F.f.setDoc(CD("stats", uid), { uid, targets }, { mergeFields: ["uid", "targets"] }); }, "Targets saved"),
   saveRegister: (s, records) => act(async () => {
@@ -318,21 +321,21 @@ const A = {
     if (S.demo) { S.sessions = S.sessions.filter(x => x !== s); delete S.att[s.id]; return; }
     const b = F.f.writeBatch(F.db); b.delete(CD("sessions", s.id)); b.delete(CD("registers", s.id));
     Object.keys(prev).forEach(uid => b.delete(CD("attendance", s.id + "_" + uid))); await b.commit();
-  }, "Session deleted"),
+  }, "Session deleted", ALWAYS),
   postAnn: data => act(async () => {
     const body = { ...data, author: me().name, authorUid: myId(), date: TODAY, ts: Date.now() };
     if (S.demo) { S.announcements.push({ id: rid(), ...body }); return; }
     await F.f.setDoc(CD("announcements", rid()), body);
   }, "Posted to the board"),
-  deleteAnn: a => act(async () => { if (S.demo) { S.announcements = S.announcements.filter(x => x !== a); return; } await F.f.deleteDoc(CD("announcements", a.id)); }, "Deleted"),
+  deleteAnn: a => act(async () => { if (S.demo) { S.announcements = S.announcements.filter(x => x !== a); return; } await F.f.deleteDoc(CD("announcements", a.id)); }, "Deleted", ALWAYS),
   saveMember: (m, data) => act(async () => {
     if (S.demo) { Object.assign(m, data); return; }
     await F.f.updateDoc(CD("members", m.id), data);
     if (m.id === S.user.uid && data.name) await F.f.updateDoc(D("users", m.id), { name: data.name }).catch(() => {});
-  }, "Saved"),
-  setRole: (m, role) => act(async () => { if (S.demo) { m.role = role; return; } await F.f.updateDoc(CD("members", m.id), { role }); }, role === "coach" ? `${m.name} is now a coach` : `${m.name} is now a player`),
-  removeMember: m => act(async () => { if (S.demo) { S.members = S.members.filter(x => x !== m); return; } await F.f.deleteDoc(CD("members", m.id)); }, `${m.name} removed from the club`),
-  saveClub: data => act(async () => { if (S.demo) { Object.assign(S.club, data); return; } await F.f.updateDoc(CD(), data); }, "Club updated"),
+  }, "Saved", ALWAYS),
+  setRole: (m, role) => act(async () => { if (S.demo) { m.role = role; return; } await F.f.updateDoc(CD("members", m.id), { role }); }, role === "coach" ? `${m.name} is now a coach` : `${m.name} is now a player`, ALWAYS),
+  removeMember: m => act(async () => { if (S.demo) { S.members = S.members.filter(x => x !== m); return; } await F.f.deleteDoc(CD("members", m.id)); }, `${m.name} removed from the club`, ALWAYS),
+  saveClub: data => act(async () => { if (S.demo) { Object.assign(S.club, data); return; } await F.f.updateDoc(CD(), data); }, "Club updated", ALWAYS),
   newJoinCode: () => act(async () => {
     if (S.demo) { S.club.joinCode = newCode(); return; }
     const old = S.club.joinCode; const code = newCode();
@@ -356,7 +359,7 @@ async function deleteLogItem(item) {
 /* ---------- create / join / leave clubs ---------- */
 async function createClub(data, coachName) {
   const f = F.f; const uid = S.user.uid; const ref = f.doc(Col("clubs")); const code = newCode();
-  await f.setDoc(ref, { name: data.name, sport: data.sport, season: data.season, ownerUid: uid, joinCode: code, created: TODAY });
+  await f.setDoc(ref, { name: data.name, sport: data.sport, season: data.season, ownerUid: uid, joinCode: code, created: TODAY, createdAt: f.serverTimestamp() });
   await f.setDoc(D("clubs", ref.id, "members", uid), { uid, name: coachName, role: "coach", number: "", position: "Head coach", joined: TODAY });
   await f.setDoc(D("joinCodes", code), { club: ref.id, name: data.name, created: TODAY });
   await f.updateDoc(D("users", uid), { clubs: f.arrayUnion(ref.id), name: coachName });
@@ -440,6 +443,7 @@ function render() {
   if (S.phase === "auth") { app.replaceChildren(authPage()); return; }
   if (S.phase === "clubs") { app.replaceChildren(clubsPage()); return; }
   if (S.phase === "consent") { app.replaceChildren(consentPage()); return; }
+  if (S.phase === "admin") { app.replaceChildren(adminPage()); return; }
   if (!S.club || !me()) { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, el("div", { class: "crest" }, "TL"), el("h2", {}, "Opening the clubhouse"), el("p", { class: "muted" }, "Loading your squad…")))); return; }
   const coach = isCoach();
   const tabs = coach ? [["today", "Today"], ["squad", "Squad"], ["schedule", "Schedule"], ["board", "Board"]] : [["home", "Home"], ["log", "My log"], ["me", "My season"], ["board", "Board"]];
@@ -455,12 +459,15 @@ function header() {
   const c = S.club || {}; const m = me();
   return el("header", { class: "top" },
     el("div", { class: "crest", "aria-hidden": "true" }, initials(c.name || "Touchline")),
-    el("div", { class: "club" }, el("h1", {}, c.name || "Touchline"), el("div", { class: "meta" }, [sport().label, c.season && `Season ${c.season}`, `${players().length} players`].filter(Boolean).join(" · "))),
+    el("div", { class: "club" }, el("h1", {}, c.name || "Touchline"), el("div", { class: "meta" }, [sport().label, c.season && `Season ${c.season}`, `${players().length} player${players().length === 1 ? "" : "s"}`].filter(Boolean).join(" · "))),
     m ? el("button", { class: "whoami", onclick: S.demo ? openDemoPicker : openAccount, title: S.demo ? "Switch who you’re viewing as" : "Your account" }, jersey(m), el("span", { class: "t" }, el("b", {}, m.name), el("span", {}, S.demo ? (m.role === "coach" ? "Coach view · switch" : "Player view · switch") : (m.role === "coach" ? "Coach · account" : "Player · account")))) : null);
 }
 function banner() {
   if (S.err) return el("div", { class: "banner", style: "background:var(--bad-soft);border-color:var(--bad)" }, el("p", {}, S.err), el("button", { class: "btn", onclick: () => { S.err = ""; render(); } }, "Dismiss"));
   if (S.preview) return el("div", { class: "banner" }, el("p", {}, el("b", {}, "Preview"), `You’re seeing what ${byId(S.preview)?.name || "this player"} sees. Nothing can be changed here.`), el("button", { class: "btn primary", onclick: () => { const id = S.preview; S.preview = null; go("player", id); } }, "Exit preview"));
+  const bill = billing();
+  if (bill.state === "expired") return el("div", { class: "banner locked" }, el("p", {}, el("b", {}, "Read-only"), isOwner() ? (bill.wasPaid ? "Your subscription has ended. " : "Your 30-day free trial has ended. ") + "Everyone can still see and download their data, but nothing new can be added until you subscribe." : "This club’s subscription has ended, so nothing new can be added for now. Your data is safe. The club owner can renew it."), isOwner() ? el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`) : null);
+  if (bill.state === "trial" && bill.days <= 7 && isOwner()) return el("div", { class: "banner" }, el("p", {}, el("b", {}, bill.days <= 1 ? "Last day of your trial" : `${bill.days} days left`), "of your free trial. Subscribe to keep using everything after it ends."), el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`));
   if (S.demo) return el("div", { class: "banner" }, el("p", {}, el("b", {}, "Demo team"), "Everything here is example data and resets when you leave. Switch between the coach and a player with the button in the top corner."), el("button", { class: "btn", onclick: openDemoPicker }, "Switch view"), el("button", { class: "btn primary", onclick: exitDemo }, "Create an account"));
   return null;
 }
@@ -668,6 +675,7 @@ function clubsPage() {
       el("button", { class: "btn", style: "justify-content:center", onclick: openCreate }, "Create a club (coaches)")),
     el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: openProfileEdit }, "Edit my name"), el("button", { class: "linkish", onclick: doSignOut }, "Sign out")),
     el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: exportMyData }, "Download my data"), el("button", { class: "linkish", style: "color:var(--bad)", onclick: openDeleteAccount }, "Delete my account")),
+    S.isAdmin ? el("button", { class: "btn", style: "justify-content:center", onclick: openAdmin }, "Admin: clubs and subscriptions") : null,
     legalLinks()));
 }
 function openCreate() {
@@ -911,6 +919,7 @@ function logList(ls, canDelete) {
 }
 function addLog(type) {
   if (S.preview) { toast("This is a preview. Players log from their own account."); return; }
+  if (locked()) { toast(lockedMsg()); return; }
   if (type === "meal") return addMeal();
   modal("Log a workout", [
     el("div", { class: "fields2" }, field("Type", sel("f-kind", "kind", WORKOUTS, "Gym")), field("Date", el("input", { id: "f-date", type: "date", name: "date", value: TODAY, max: TODAY, required: true })), field("Minutes", el("input", { id: "f-dur", type: "number", name: "duration", min: 1, max: 600, value: 45, required: true }))),
@@ -1075,6 +1084,7 @@ function vSquad() {
     m.role === "player" ? el("button", { class: "btn small", onclick: () => go("player", m.id) }, "Profile") : null,
     el("button", { class: "btn small", onclick: () => editMember(m) }, "Edit"));
   return [
+    S.demo ? null : billingPanel(),
     invitePanel(false),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, `Players (${players().length})`)), players().length ? el("ul", { class: "list" }, players().map(row)) : el("div", { class: "empty" }, "No players yet. Share the code above.")),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Coaching staff")), el("ul", { class: "list" }, coaches().map(row))),
@@ -1215,6 +1225,103 @@ function clubFields(c) {
     el("div", { class: "fields2" }, field("Sport", sel("c-sport", "sport", Object.entries(SPORTS).map(([k, v]) => [k, v.label]), c?.sport || "football")), field("Season", el("input", { id: "c-season", name: "season", maxlength: 20, value: c?.season || "2026/27" })))];
 }
 function openClubEdit() { modal("Edit club", clubFields(S.club), { submit: fd => A.saveClub({ name: fd.get("name").trim(), sport: fd.get("sport"), season: fd.get("season").trim() }) }); }
+
+/* ---------- subscription ---------- */
+const SITE = window.TEAM_SITE || {};
+const TRIAL_DAYS = 30;
+const price = () => SITE.price || "$20/month";
+const tsDate = t => !t ? null : t.toDate ? t.toDate() : new Date(t);
+function billing(club = S.club) {
+  if (!club || S.demo) return { state: "demo" };
+  const now = Date.now(); const created = tsDate(club.createdAt); const paid = tsDate(club.paidUntil);
+  if (paid && paid.getTime() > now) return { state: "paid", until: paid };
+  if (!created) return { state: "legacy" };
+  const trialEnd = new Date(created.getTime() + TRIAL_DAYS * 864e5);
+  if (trialEnd.getTime() > now) return { state: "trial", until: trialEnd, days: Math.ceil((trialEnd.getTime() - now) / 864e5) };
+  return { state: "expired", wasPaid: !!paid };
+}
+const locked = () => billing().state === "expired";
+const lockedMsg = () => isOwner() ? "Your club is read-only until you subscribe. Open Squad → Subscription." : "The club is read-only right now. The club owner needs to renew the subscription.";
+const fmtDate = d => d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+const payReady = () => /^https:\/\//.test(SITE.stripeLink || "");
+function subscribe() {
+  if (!payReady()) { toast(SITE.email && !/^FILL IN/.test(SITE.email) ? `Online payment isn’t set up yet. Email ${SITE.email} to subscribe.` : "Online payment isn’t set up yet. Please contact us to subscribe."); return; }
+  const u = new URL(SITE.stripeLink);
+  u.searchParams.set("client_reference_id", S.clubId);
+  if (S.user?.email) u.searchParams.set("prefilled_email", S.user.email);
+  window.open(u.toString(), "_blank", "noopener");
+  toast("Opening secure checkout. Your club unlocks as soon as payment is confirmed.");
+}
+function billingPanel() {
+  const b = billing(); const owner = isOwner();
+  const status = {
+    trial: [`Free trial · ${b.days} day${b.days === 1 ? "" : "s"} left`, "accent", `Ends ${b.until ? fmtDate(b.until) : ""}. Subscribe any time to keep everything running after that.`],
+    paid: ["Subscribed", "good", `Paid until ${b.until ? fmtDate(b.until) : ""}. Renews automatically each month.`],
+    expired: ["Read-only", "bad", "Nothing new can be added until the club subscribes. All data is kept and can still be viewed, downloaded or deleted."],
+    legacy: ["Early access", "good", "Your club joined before subscriptions started. Thanks for being one of the first!"],
+  }[b.state] || ["", "", ""];
+  return el("section", { class: "panel" },
+    el("div", { class: "panel-head" }, el("h3", {}, "Subscription"), el("span", { class: "pill " + status[1] }, status[0])),
+    el("p", { class: "muted", style: "margin:0 0 12px" }, status[2]),
+    owner ? el("div", { class: "row" },
+      b.state !== "paid" && b.state !== "legacy" ? el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`) : null,
+      /^https:\/\//.test(SITE.stripePortal || "") ? el("a", { class: "btn", href: SITE.stripePortal, target: "_blank", rel: "noopener" }, "Manage billing") : null)
+      : el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Only the club owner can manage the subscription."),
+    owner ? el("p", { class: "muted", style: "margin:12px 0 0;font-size:12px" }, `${price()} per club, unlimited players and coaches. Cancel any time. Club reference: `, el("code", {}, S.clubId)) : null);
+}
+
+/* ---------- admin: every club's trial and payment status (site owner only) ---------- */
+let adminState = { clubs: [], q: "", loading: false };
+async function checkAdmin() {
+  try { S.isAdmin = (await F.f.getDoc(D("admins", S.user.uid))).exists(); } catch { S.isAdmin = false; }
+}
+async function openAdmin() {
+  stopClub(); S.phase = "admin"; adminState.loading = true; render();
+  try {
+    const snap = await F.f.getDocs(Col("clubs"));
+    const clubs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    await Promise.all(clubs.map(async c => {
+      try { const u = await F.f.getDoc(D("users", c.ownerUid)); c.owner = u.exists() ? u.data() : {}; } catch { c.owner = {}; }
+      try { c.count = (await F.f.getCountFromServer(Col("clubs", c.id, "members"))).data().count; } catch { c.count = "?"; }
+    }));
+    clubs.sort((a, b) => (tsDate(b.createdAt)?.getTime() || 0) - (tsDate(a.createdAt)?.getTime() || 0));
+    adminState.clubs = clubs;
+  } catch (e) { console.error(e); toast(fsErr(e)); }
+  adminState.loading = false; render();
+}
+async function setPaid(c, mode) {
+  const f = F.f; let until = null;
+  if (mode !== "end") {
+    const base = new Date(Math.max(Date.now(), tsDate(c.paidUntil)?.getTime() || 0));
+    until = new Date(base); if (mode === "year") until.setFullYear(until.getFullYear() + 1); else until.setMonth(until.getMonth() + 1);
+  }
+  try {
+    await f.updateDoc(D("clubs", c.id), { paidUntil: until ? f.Timestamp.fromDate(until) : null, billingNote: c.billingNote || "" });
+    c.paidUntil = until; toast(until ? `${c.name} paid until ${fmtDate(until)}` : `${c.name}’s subscription ended`); render();
+  } catch (e) { toast(fsErr(e)); }
+}
+function adminPage() {
+  const q = adminState.q.toLowerCase();
+  const list = adminState.clubs.filter(c => !q || [c.name, c.id, c.owner?.email, c.owner?.name].some(x => String(x || "").toLowerCase().includes(q)));
+  const counts = { trial: 0, paid: 0, expired: 0, legacy: 0 }; adminState.clubs.forEach(c => counts[billing(c).state]++);
+  const pill = { trial: "accent", paid: "good", expired: "bad", legacy: "" };
+  const search = el("input", { id: "adm-q", value: adminState.q, placeholder: "Search by club, owner email or club reference", style: "width:100%", oninput: e => { adminState.q = e.target.value; clearTimeout(adminState.t); adminState.t = setTimeout(() => { render(); const i = $("#adm-q"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); } });
+  return el("div", { class: "stack", style: "padding-block:20px" },
+    el("div", { class: "row", style: "justify-content:space-between" }, el("div", {}, el("div", { class: "label" }, "Admin"), el("h2", {}, "Clubs and subscriptions")), el("div", { class: "row" }, el("button", { class: "btn", onclick: openAdmin }, "Refresh"), el("button", { class: "btn", onclick: () => { S.phase = "clubs"; render(); } }, "Back"))),
+    el("div", { class: "tiles" }, tile("Paying", counts.paid), tile("On trial", counts.trial), tile("Read-only", counts.expired), tile("Early access", counts.legacy)),
+    el("section", { class: "panel" },
+      el("p", { class: "muted", style: "margin:0 0 10px;font-size:14px" }, "When Stripe tells you a club has paid, find it here by the club reference (Stripe shows it as client_reference_id) or the owner’s email, then press +1 month or +1 year. Each payment extends from today or from the current paid-until date, whichever is later."),
+      el("div", { class: "field" }, search)),
+    adminState.loading ? el("div", { class: "empty" }, "Loading clubs…") : list.length ? el("section", { class: "panel" }, el("ul", { class: "list" }, list.map(c => {
+      const b = billing(c);
+      const when = b.state === "trial" ? `Trial ends ${fmtDate(b.until)}` : b.state === "paid" ? `Paid until ${fmtDate(b.until)}` : b.state === "expired" ? "Trial or subscription over" : "Joined before subscriptions";
+      return el("li", { style: "flex-wrap:wrap" },
+        el("div", { class: "li-main", style: "min-width:220px" }, el("div", { class: "row", style: "gap:8px" }, el("b", {}, c.name), el("span", { class: "pill " + pill[b.state] }, { legacy: "early access", expired: "read-only", trial: "trial", paid: "paid" }[b.state])),
+          el("div", { class: "muted", style: "font-size:13px" }, `${c.owner?.name || "Unknown owner"} · ${c.owner?.email || "no email"} · ${c.count} member${c.count === 1 ? "" : "s"}`),
+          el("div", { class: "muted", style: "font-size:13px" }, when, " · ref ", el("code", {}, c.id))),
+        el("div", { class: "row" }, el("button", { class: "btn small", onclick: () => setPaid(c, "month") }, "+1 month"), el("button", { class: "btn small", onclick: () => setPaid(c, "year") }, "+1 year"), b.state === "paid" ? el("button", { class: "btn small ghost danger", onclick: () => confirmDel(`End ${c.name}’s subscription now? The club becomes read-only straight away unless it’s still in its trial.`, () => setPaid(c, "end").then(() => true), "End subscription") }, "End") : null));
+    }))) : el("div", { class: "empty" }, "No clubs match."));
+}
 
 /* ---------- demo team (local only, never saved) ---------- */
 function startDemo() { S.demo = true; Object.assign(S, demoData()); S.demoMe = "coach"; S.view = null; S.phase = "club"; render(); }
