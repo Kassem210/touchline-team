@@ -10,6 +10,10 @@ The app for sports teams and clubs: football, basketball, tennis, gymnastics or 
 - A demo team on the sign-in page lets anyone look around first.
 - **Legal basics**: privacy policy and terms pages; at sign-up everyone confirms their age, agrees to the terms and separately agrees to coaches seeing their logs; players under 16 need a parent or guardian's name, email and agreement; AI food scanning is only offered to people 16 and over; anyone can download all their data or delete their account; club owners can delete a club and everything in it. If you change the policy or terms, bump `LEGAL_VERSION` in `app.js` and everyone is asked to agree again.
 
+## Feedback from testers
+
+Everyone can press **Send feedback** in the account menu (or on the clubs page). Messages appear at the bottom of your admin screen, newest first. While online payment isn't set up, club owners near the end of their trial see **Get in touch** instead of **Subscribe**, which sends you a message too. Extend a test club from the admin screen with **+1 month**.
+
 ## Subscriptions ($20 a month per club)
 
 Every new club gets a 30-day free trial. After that the club needs a subscription, or it becomes read-only: members can still view, download and delete their data, but nothing new can be added. This is enforced by `firestore.rules`, so nobody can extend their own trial or mark themselves as paid. Clubs created before subscriptions existed stay free ("early access").
@@ -42,6 +46,8 @@ Plain HTML, CSS and JavaScript. No build step.
 | `firebase-config.js` | Your Firebase project's web settings |
 | `site-info.js` | Your name, contact email and country, shown in the legal pages |
 | `privacy.html`, `terms.html`, `legal.js` | Privacy policy and terms of use |
+| `help.html` | Guides for coaches and players |
+| `manifest.webmanifest`, `*.png` | App icon, "Add to Home Screen" support and the link preview image |
 | `firestore.rules` | Database security rules, pasted into Firebase |
 
 ## Set up Firebase (one time)

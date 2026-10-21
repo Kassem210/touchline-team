@@ -466,8 +466,8 @@ function banner() {
   if (S.err) return el("div", { class: "banner", style: "background:var(--bad-soft);border-color:var(--bad)" }, el("p", {}, S.err), el("button", { class: "btn", onclick: () => { S.err = ""; render(); } }, "Dismiss"));
   if (S.preview) return el("div", { class: "banner" }, el("p", {}, el("b", {}, "Preview"), `You’re seeing what ${byId(S.preview)?.name || "this player"} sees. Nothing can be changed here.`), el("button", { class: "btn primary", onclick: () => { const id = S.preview; S.preview = null; go("player", id); } }, "Exit preview"));
   const bill = billing();
-  if (bill.state === "expired") return el("div", { class: "banner locked" }, el("p", {}, el("b", {}, "Read-only"), isOwner() ? (bill.wasPaid ? "Your subscription has ended. " : "Your 30-day free trial has ended. ") + "Everyone can still see and download their data, but nothing new can be added until you subscribe." : "This club’s subscription has ended, so nothing new can be added for now. Your data is safe. The club owner can renew it."), isOwner() ? el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`) : null);
-  if (bill.state === "trial" && bill.days <= 7 && isOwner()) return el("div", { class: "banner" }, el("p", {}, el("b", {}, bill.days <= 1 ? "Last day of your trial" : `${bill.days} days left`), "of your free trial. Subscribe to keep using everything after it ends."), el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`));
+  if (bill.state === "expired") return el("div", { class: "banner locked" }, el("p", {}, el("b", {}, "Read-only"), isOwner() ? (bill.wasPaid ? "Your subscription has ended. " : "Your 30-day free trial has ended. ") + "Everyone can still see and download their data, but nothing new can be added until you subscribe." : "This club’s subscription has ended, so nothing new can be added for now. Your data is safe. The club owner can renew it."), isOwner() ? payButton() : null);
+  if (bill.state === "trial" && bill.days <= 7 && isOwner()) return el("div", { class: "banner" }, el("p", {}, el("b", {}, bill.days <= 1 ? "Last day of your trial" : `${bill.days} days left`), payReady() ? "of your free trial. Subscribe to keep using everything after it ends." : "of your free trial. Get in touch and we’ll keep your club running."), payButton());
   if (S.demo) return el("div", { class: "banner" }, el("p", {}, el("b", {}, "Demo team"), "Everything here is example data and resets when you leave. Switch between the coach and a player with the button in the top corner."), el("button", { class: "btn", onclick: openDemoPicker }, "Switch view"), el("button", { class: "btn primary", onclick: exitDemo }, "Create an account"));
   return null;
 }
@@ -673,7 +673,7 @@ function clubsPage() {
     el("div", { class: "stack", style: "gap:8px" },
       el("button", { class: "btn primary", style: "justify-content:center", onclick: () => openJoin("") }, "Join a club with a code"),
       el("button", { class: "btn", style: "justify-content:center", onclick: openCreate }, "Create a club (coaches)")),
-    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: openProfileEdit }, "Edit my name"), el("button", { class: "linkish", onclick: doSignOut }, "Sign out")),
+    el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: openProfileEdit }, "Edit my name"), el("button", { class: "linkish", onclick: () => openFeedback() }, "Send feedback"), el("a", { class: "linkish", href: "help.html", target: "_blank", rel: "noopener", style: "text-decoration:none" }, "Help"), el("button", { class: "linkish", onclick: doSignOut }, "Sign out")),
     el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: exportMyData }, "Download my data"), el("button", { class: "linkish", style: "color:var(--bad)", onclick: openDeleteAccount }, "Delete my account")),
     S.isAdmin ? el("button", { class: "btn", style: "justify-content:center", onclick: openAdmin }, "Admin: clubs and subscriptions") : null,
     legalLinks()));
@@ -726,6 +726,8 @@ function openAccount() {
       el("button", { type: "button", class: "btn", onclick: () => editMember(m, true) }, "Edit my details in this club"),
       el("button", { type: "button", class: "btn", onclick: () => { closeModal(); stopClub(); S.phase = "clubs"; loadClubNames(); render(); } }, "My clubs · join or create another"),
       !owner ? el("button", { type: "button", class: "btn danger", onclick: () => confirmDel(`Leave ${S.club.name}? Your coach will no longer see your logs.`, leaveClub, "Leave club") }, "Leave this club") : null,
+      el("button", { type: "button", class: "btn", onclick: () => { closeModal(); openFeedback(); } }, "Send feedback"),
+      el("a", { class: "btn", href: "help.html", target: "_blank", rel: "noopener" }, "Help and guides"),
       el("button", { type: "button", class: "btn", onclick: doSignOut }, "Sign out")),
     el("div", { class: "row", style: "justify-content:space-between" }, el("button", { type: "button", class: "linkish", onclick: exportMyData }, "Download my data"), el("button", { type: "button", class: "linkish", style: "color:var(--bad)", onclick: () => { closeModal(); openDeleteAccount(); } }, "Delete my account")),
     legalLinks(),
@@ -1226,6 +1228,22 @@ function clubFields(c) {
 }
 function openClubEdit() { modal("Edit club", clubFields(S.club), { submit: fd => A.saveClub({ name: fd.get("name").trim(), sport: fd.get("sport"), season: fd.get("season").trim() }) }); }
 
+/* ---------- feedback from testers ---------- */
+function openFeedback(kind = "Idea", text = "") {
+  if (S.demo || !S.user) { const e = contactEmail(); toast(e ? `Sign in to send feedback, or email ${e}` : "Create an account to send feedback."); return; }
+  modal("Send feedback", [
+    el("p", { class: "muted", style: "margin:0" }, "Tell us what works, what’s confusing or what you’d like next. It goes straight to the people who build Touchline Team."),
+    el("div", { class: "field" }, el("span", {}, "What kind?"), seg("kind", [["Idea", "Idea"], ["Problem", "Something’s wrong"], ["Question", "Question"], ["Praise", "Something I like"]], kind)),
+    field("Your message", el("textarea", { id: "fb-msg", name: "text", required: true, maxlength: 2000, style: "min-height:130px", placeholder: "e.g. It would help if coaches could…" }, text)),
+  ], { label: "Send", submit: async fd => {
+    const m = me();
+    try {
+      await F.f.setDoc(F.f.doc(Col("appFeedback")), { uid: S.user.uid, email: S.user.email || "", name: m?.name || S.profile?.name || "", role: m?.role || "", clubId: S.clubId || "", clubName: S.club?.name || "", kind: fd.get("kind") || "Idea", text: String(fd.get("text")).trim().slice(0, 2000), view: S.phase === "club" ? S.view || "" : S.phase, ua: navigator.userAgent.slice(0, 200), at: F.f.serverTimestamp(), ts: Date.now() });
+      toast("Thanks! Your feedback has been sent."); return true;
+    } catch (e) { toast(fsErr(e)); return false; }
+  } });
+}
+
 /* ---------- subscription ---------- */
 const SITE = window.TEAM_SITE || {};
 const TRIAL_DAYS = 30;
@@ -1271,10 +1289,19 @@ function billingPanel() {
     el("div", { class: "panel-head" }, el("h3", {}, "Subscription"), el("span", { class: "pill " + status[1] }, status[0])),
     el("p", { class: "muted", style: "margin:0 0 12px" }, status[2]),
     owner ? el("div", { class: "row" },
-      b.state !== "paid" && b.state !== "legacy" ? el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`) : null,
+      b.state !== "paid" && b.state !== "legacy" ? payButton() : null,
       /^https:\/\//.test(portalLink()) ? el("a", { class: "btn", href: portalLink(), target: "_blank", rel: "noopener" }, "Manage billing") : null)
       : el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Only the club owner can manage the subscription."),
+    owner && !payReady() && b.state !== "paid" && b.state !== "legacy" ? el("p", { class: "muted", style: "margin:12px 0 0;font-size:13px" }, "Online payment is coming soon. While we’re testing with our first clubs, just get in touch before your trial ends and we’ll keep your club running.") : null,
     owner ? el("p", { class: "muted", style: "margin:12px 0 0;font-size:12px" }, `${price()} per club, unlimited players and coaches. Cancel any time. Club reference: `, el("code", {}, S.clubId)) : null);
+}
+const contactEmail = () => (SITE.email && !/^FILL IN/.test(SITE.email)) ? SITE.email : "";
+// Subscribe when payments are set up; otherwise a way to get in touch
+function payButton() {
+  if (payReady()) return el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`);
+  const e = contactEmail();
+  return e ? el("a", { class: "btn primary", href: `mailto:${e}?subject=${encodeURIComponent("Keep our club running: " + (S.club?.name || ""))}&body=${encodeURIComponent("Club reference: " + S.clubId + "\n")}` }, "Get in touch")
+    : el("button", { class: "btn primary", onclick: () => openFeedback("Question", `Please keep our club (${S.club?.name || ""}) running after the trial.`) }, "Get in touch");
 }
 
 /* ---------- admin: every club's trial and payment status (site owner only) ---------- */
@@ -1293,6 +1320,7 @@ async function openAdmin() {
     }));
     clubs.sort((a, b) => (tsDate(b.createdAt)?.getTime() || 0) - (tsDate(a.createdAt)?.getTime() || 0));
     adminState.clubs = clubs;
+    try { adminState.feedback = (await F.f.getDocs(F.f.query(Col("appFeedback"), F.f.orderBy("ts", "desc"), F.f.limit(100)))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { console.warn(e); adminState.feedback = []; }
   } catch (e) { console.error(e); toast(fsErr(e)); }
   adminState.loading = false; render();
 }
@@ -1327,7 +1355,12 @@ function adminPage() {
           el("div", { class: "muted", style: "font-size:13px" }, `${c.owner?.name || "Unknown owner"} · ${c.owner?.email || "no email"} · ${c.count} member${c.count === 1 ? "" : "s"}`),
           el("div", { class: "muted", style: "font-size:13px" }, when, " · ref ", el("code", {}, c.id))),
         el("div", { class: "row" }, el("button", { class: "btn small", onclick: () => setPaid(c, "month") }, "+1 month"), el("button", { class: "btn small", onclick: () => setPaid(c, "year") }, "+1 year"), b.state === "paid" ? el("button", { class: "btn small ghost danger", onclick: () => confirmDel(`End ${c.name}’s subscription now? The club becomes read-only straight away unless it’s still in its trial.`, () => setPaid(c, "end").then(() => true), "End subscription") }, "End") : null));
-    }))) : el("div", { class: "empty" }, "No clubs match."));
+    }))) : el("div", { class: "empty" }, "No clubs match."),
+    el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Feedback from users"), el("span", { class: "muted" }, `${(adminState.feedback || []).length} latest`)),
+      (adminState.feedback || []).length ? el("ul", { class: "list" }, adminState.feedback.map(f => el("li", {},
+        el("div", { class: "li-main" }, el("div", { class: "row", style: "gap:8px" }, el("span", { class: "pill " + ({ Problem: "bad", Idea: "accent", Praise: "good" }[f.kind] || "") }, f.kind || "Note"), el("b", {}, f.name || "Someone"), el("span", { class: "muted", style: "font-size:12px" }, `${f.role ? f.role + " · " : ""}${f.clubName || "no club"} · ${f.ts ? new Date(f.ts).toLocaleString() : ""}`)),
+          el("p", {}, f.text), el("div", { class: "muted", style: "font-size:12px" }, f.email || "")),
+        el("button", { class: "icon-btn", title: "Delete", "aria-label": "Delete feedback", onclick: async () => { try { await F.f.deleteDoc(D("appFeedback", f.id)); adminState.feedback = adminState.feedback.filter(x => x !== f); render(); } catch (e) { toast(fsErr(e)); } } }, "×")))) : el("div", { class: "empty" }, "No feedback yet.")));
 }
 
 /* ---------- demo team (local only, never saved) ---------- */

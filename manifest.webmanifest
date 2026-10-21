@@ -1,0 +1,14 @@
+{
+  "name": "Touchline Team",
+  "short_name": "Touchline",
+  "description": "The app for coaches and players: food, training, attendance, form, plans and match-day squads.",
+  "start_url": "app.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F1F4F0",
+  "theme_color": "#13211A",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
