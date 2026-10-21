@@ -64,8 +64,6 @@
   /* product mock */
   .mock{position:relative}
   .mock .screen{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 30px 70px rgba(19,31,52,.16),0 4px 14px rgba(19,31,52,.06);overflow:hidden}
-  .mock .bar{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
-  .mock .bar i{width:9px;height:9px;border-radius:50%;background:var(--line)}
   .mock .body{padding:14px;display:flex;flex-direction:column;gap:10px}
   .mock .nextm{background:var(--ink);color:var(--bg);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px}
   .mock .nextm .d{font-family:var(--f-display);font-weight:800;font-size:30px;line-height:1}
@@ -82,7 +80,7 @@
   .flagm{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:9px;background:var(--surface-2);border-left:4px solid var(--warn);font-size:12.5px}
   .mock{margin-bottom:40px}
   .float{position:absolute;right:-14px;bottom:-60px;width:min(250px,62%);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:0 20px 50px rgba(19,31,52,.18);transform:rotate(2deg)}
-  .float .ph{height:86px;border-radius:10px;background:radial-gradient(circle at 30% 40%,#f3c27a 0 18%,transparent 19%),radial-gradient(circle at 62% 55%,#7bb661 0 16%,transparent 17%),radial-gradient(circle at 48% 30%,#f7f2e7 0 20%,transparent 21%),linear-gradient(135deg,#d9cbb5,#b9a68a);margin-bottom:8px}
+  .float .ph{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px;margin-bottom:8px}
   .float .lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
   .float ul{list-style:none;margin:6px 0 0;padding:0;font-size:12px;display:flex;flex-direction:column;gap:3px}
   .float li{display:flex;justify-content:space-between;gap:8px}
@@ -193,7 +191,6 @@
 
       <div class="mock" aria-label="Example of the coach’s Today screen">
         <div class="screen">
-          <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
           <div class="body">
             <div class="nextm"><div class="d">24<small>Sat</small></div><div><b>vs Kingsway Colts</b><span>11:00 · 14 available · 1 can’t make it · 2 no reply</span></div></div>
             <div class="flagm"><span class="jersey" style="width:24px;height:24px;font-size:12px">9</span>Ade can’t make Saturday: school exam</div>
@@ -205,10 +202,10 @@
           </div>
         </div>
         <div class="float" aria-label="Example of a scanned meal">
-          <div class="ph" role="img" aria-label="Meal photo"></div>
+          <img class="ph" src="meal-photo.jpg" alt="A bowl of chicken tikka masala with white rice and coriander" width="800" height="450">
           <div class="lbl">From photo · check and adjust</div>
-          <ul><li><span>Chicken breast · 150 g</span><span>250 kcal</span></li><li><span>White rice · 200 g</span><span>260 kcal</span></li><li><span>Broccoli · 80 g</span><span>28 kcal</span></li></ul>
-          <div class="tot"><span class="chip">538 kcal</span><span class="chip">P 53 g</span><span class="chip">C 61 g</span><span class="chip">F 7 g</span></div>
+          <ul><li><span>Chicken tikka masala · 250 g</span><span>400 kcal</span></li><li><span>White rice · 200 g</span><span>260 kcal</span></li><li><span>Fresh coriander · 2 g</span><span>0 kcal</span></li></ul>
+          <div class="tot"><span class="chip">660 kcal</span><span class="chip">P 37 g</span><span class="chip">C 71 g</span><span class="chip">F 25 g</span></div>
         </div>
       </div>
     </div>
