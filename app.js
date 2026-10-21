@@ -1243,12 +1243,19 @@ function billing(club = S.club) {
 const locked = () => billing().state === "expired";
 const lockedMsg = () => isOwner() ? "Your club is read-only until you subscribe. Open Squad → Subscription." : "The club is read-only right now. The club owner needs to renew the subscription.";
 const fmtDate = d => d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
-const payReady = () => /^https:\/\//.test(SITE.stripeLink || "");
+const checkoutLink = () => SITE.checkoutLink || SITE.stripeLink || "";
+const portalLink = () => SITE.billingPortal || SITE.stripePortal || "";
+const payReady = () => /^https:\/\//.test(checkoutLink());
 function subscribe() {
   if (!payReady()) { toast(SITE.email && !/^FILL IN/.test(SITE.email) ? `Online payment isn’t set up yet. Email ${SITE.email} to subscribe.` : "Online payment isn’t set up yet. Please contact us to subscribe."); return; }
-  const u = new URL(SITE.stripeLink);
-  u.searchParams.set("client_reference_id", S.clubId);
-  if (S.user?.email) u.searchParams.set("prefilled_email", S.user.email);
+  const u = new URL(checkoutLink());
+  if (/lemonsqueezy/.test(u.hostname)) { // Lemon Squeezy: custom data comes back on the order, email is prefilled
+    u.searchParams.set("checkout[custom][club_id]", S.clubId);
+    if (S.user?.email) u.searchParams.set("checkout[email]", S.user.email);
+  } else { // Stripe Payment Links
+    u.searchParams.set("client_reference_id", S.clubId);
+    if (S.user?.email) u.searchParams.set("prefilled_email", S.user.email);
+  }
   window.open(u.toString(), "_blank", "noopener");
   toast("Opening secure checkout. Your club unlocks as soon as payment is confirmed.");
 }
@@ -1265,7 +1272,7 @@ function billingPanel() {
     el("p", { class: "muted", style: "margin:0 0 12px" }, status[2]),
     owner ? el("div", { class: "row" },
       b.state !== "paid" && b.state !== "legacy" ? el("button", { class: "btn primary", onclick: subscribe }, `Subscribe · ${price()}`) : null,
-      /^https:\/\//.test(SITE.stripePortal || "") ? el("a", { class: "btn", href: SITE.stripePortal, target: "_blank", rel: "noopener" }, "Manage billing") : null)
+      /^https:\/\//.test(portalLink()) ? el("a", { class: "btn", href: portalLink(), target: "_blank", rel: "noopener" }, "Manage billing") : null)
       : el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Only the club owner can manage the subscription."),
     owner ? el("p", { class: "muted", style: "margin:12px 0 0;font-size:12px" }, `${price()} per club, unlimited players and coaches. Cancel any time. Club reference: `, el("code", {}, S.clubId)) : null);
 }
@@ -1310,7 +1317,7 @@ function adminPage() {
     el("div", { class: "row", style: "justify-content:space-between" }, el("div", {}, el("div", { class: "label" }, "Admin"), el("h2", {}, "Clubs and subscriptions")), el("div", { class: "row" }, el("button", { class: "btn", onclick: openAdmin }, "Refresh"), el("button", { class: "btn", onclick: () => { S.phase = "clubs"; render(); } }, "Back"))),
     el("div", { class: "tiles" }, tile("Paying", counts.paid), tile("On trial", counts.trial), tile("Read-only", counts.expired), tile("Early access", counts.legacy)),
     el("section", { class: "panel" },
-      el("p", { class: "muted", style: "margin:0 0 10px;font-size:14px" }, "When Stripe tells you a club has paid, find it here by the club reference (Stripe shows it as client_reference_id) or the owner’s email, then press +1 month or +1 year. Each payment extends from today or from the current paid-until date, whichever is later."),
+      el("p", { class: "muted", style: "margin:0 0 10px;font-size:14px" }, "When you get a payment email, find the club here by its reference (shown on the order as club_id, or client_reference_id on Stripe) or the owner’s email, then press +1 month or +1 year. Each payment extends from today or from the current paid-until date, whichever is later."),
       el("div", { class: "field" }, search)),
     adminState.loading ? el("div", { class: "empty" }, "Loading clubs…") : list.length ? el("section", { class: "panel" }, el("ul", { class: "list" }, list.map(c => {
       const b = billing(c);

@@ -8,8 +8,10 @@ window.TEAM_SITE = {
   updated: "19 October 2026",
   // Subscription
   price: "$20/month",
-  // Stripe → Payment Links → create a link for a $20/month recurring product, paste its URL here (https://buy.stripe.com/...)
-  stripeLink: "",
-  // Stripe → Settings → Billing → Customer portal → copy the login link (https://billing.stripe.com/p/login/...)
-  stripePortal: "",
+  // Who takes payments: "Lemon Squeezy" or "Stripe" (shown in the legal pages)
+  payProvider: "Lemon Squeezy",
+  // Lemon Squeezy → Products → your $20/month product → Share → copy the checkout link (https://YOURSTORE.lemonsqueezy.com/buy/...)
+  checkoutLink: "",
+  // Lemon Squeezy customer portal: https://YOURSTORE.lemonsqueezy.com/billing (club owners manage or cancel there)
+  billingPortal: "",
 };
