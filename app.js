@@ -679,7 +679,7 @@ function clubsPage() {
       el("button", { class: "btn", style: "justify-content:center", onclick: openCreate }, "Create a club (coaches)")),
     el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: openProfileEdit }, "Edit my name"), el("button", { class: "linkish", onclick: () => openFeedback() }, "Send feedback"), el("a", { class: "linkish", href: "help.html", target: "_blank", rel: "noopener", style: "text-decoration:none" }, "Help"), el("button", { class: "linkish", onclick: doSignOut }, "Sign out")),
     el("div", { class: "row", style: "justify-content:space-between" }, el("button", { class: "linkish", onclick: exportMyData }, "Download my data"), el("button", { class: "linkish", style: "color:var(--bad)", onclick: openDeleteAccount }, "Delete my account")),
-    S.isAdmin ? el("button", { class: "btn", style: "justify-content:center", onclick: openAdmin }, "Admin: clubs and subscriptions") : null,
+    S.isAdmin ? el("button", { class: "btn", style: "justify-content:center", onclick: openAdmin }, "Admin dashboard") : null,
     legalLinks()));
 }
 function openCreate() {
@@ -730,6 +730,7 @@ function openAccount() {
       el("button", { type: "button", class: "btn", onclick: () => editMember(m, true) }, "Edit my details in this club"),
       el("button", { type: "button", class: "btn", onclick: () => { closeModal(); stopClub(); S.phase = "clubs"; loadClubNames(); render(); } }, "My clubs · join or create another"),
       !owner ? el("button", { type: "button", class: "btn danger", onclick: () => confirmDel(`Leave ${S.club.name}? Your coach will no longer see your logs.`, leaveClub, "Leave club") }, "Leave this club") : null,
+      S.isAdmin ? el("button", { type: "button", class: "btn primary", onclick: () => { closeModal(); openAdmin(); } }, "Admin dashboard") : null,
       el("button", { type: "button", class: "btn", onclick: () => { closeModal(); openFeedback(); } }, "Send feedback"),
       el("a", { class: "btn", href: "help.html", target: "_blank", rel: "noopener" }, "Help and guides"),
       el("button", { type: "button", class: "btn", onclick: doSignOut }, "Sign out")),
@@ -1406,7 +1407,7 @@ function adminPage() {
   const pill = { trial: "accent", paid: "good", expired: "bad", legacy: "" };
   const search = el("input", { id: "adm-q", value: adminState.q, placeholder: "Search by club, owner email or club reference", style: "width:100%", oninput: e => { adminState.q = e.target.value; clearTimeout(adminState.t); adminState.t = setTimeout(() => { render(); const i = $("#adm-q"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); } });
   return el("div", { class: "stack", style: "padding-block:20px" },
-    el("div", { class: "row", style: "justify-content:space-between" }, el("div", {}, el("div", { class: "label" }, "Admin"), el("h2", {}, "Clubs and subscriptions")), el("div", { class: "row" }, el("button", { class: "btn", onclick: openAdmin }, "Refresh"), el("button", { class: "btn", onclick: () => { S.phase = "clubs"; render(); } }, "Back"))),
+    el("div", { class: "row", style: "justify-content:space-between" }, el("div", {}, el("div", { class: "label" }, "Admin"), el("h2", {}, "Admin dashboard")), el("div", { class: "row" }, el("button", { class: "btn", onclick: openAdmin }, "Refresh"), el("button", { class: "btn", onclick: () => { S.phase = "clubs"; render(); } }, "Back"))),
     adminState.loading ? null : usagePanel(),
     el("h3", { style: "margin-top:8px" }, "Subscriptions"),
     el("div", { class: "tiles" }, tile("Paying", counts.paid), tile("On trial", counts.trial), tile("Read-only", counts.expired), tile("Early access", counts.legacy)),
