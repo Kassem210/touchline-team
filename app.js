@@ -161,7 +161,9 @@ function fsErr(e) {
 }
 
 /* ---------- boot + auth ---------- */
+const count = (field, once) => { try { window.tlCount && window.tlCount(field, once); } catch {} };
 async function boot() {
+  count("appVisits", true);
   if (START === "signup") S.authMode = "signup";
   if (START === "demo") startDemo(); else render();
   if (!CONFIG_READY && !EMU) { S.fbError = "This site isn’t connected to Firebase yet. The site owner needs to paste the project settings into firebase-config.js (see the README). You can still look around the demo team."; if (!S.demo) { S.phase = "auth"; render(); } return; }
@@ -193,6 +195,7 @@ async function loadProfile() {
   const snap = await F.f.getDoc(ref);
   if (!snap.exists()) await F.f.setDoc(ref, { name: pendingName || u.displayName || (u.email || "").split("@")[0], email: u.email || "", created: TODAY }, { merge: true });
   if (pendingConsent) { await F.f.setDoc(ref, { consent: pendingConsent }, { merge: true }); pendingConsent = null; }
+  try { const cur = (await F.f.getDoc(ref)).data() || {}; if (cur.lastSeen !== TODAY) await F.f.setDoc(ref, { lastSeen: TODAY }, { merge: true }); } catch (e) { console.warn(e); }
   const first = await F.f.getDoc(ref); S.profile = first.data();
   if (profileUnsub) profileUnsub();
   profileUnsub = F.f.onSnapshot(ref, s => { if (s.exists()) { S.profile = s.data(); if (S.phase === "clubs") { loadClubNames(); queueRender(); } } });
@@ -1322,8 +1325,68 @@ async function openAdmin() {
     clubs.sort((a, b) => (tsDate(b.createdAt)?.getTime() || 0) - (tsDate(a.createdAt)?.getTime() || 0));
     adminState.clubs = clubs;
     try { adminState.feedback = (await F.f.getDocs(F.f.query(Col("appFeedback"), F.f.orderBy("ts", "desc"), F.f.limit(100)))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { console.warn(e); adminState.feedback = []; }
+    try { adminState.usage = await loadUsage(clubs); } catch (e) { console.warn(e); adminState.usage = null; }
   } catch (e) { console.error(e); toast(fsErr(e)); }
   adminState.loading = false; render();
+}
+async function loadUsage(clubs) {
+  const f = F.f; const users = Col("users");
+  const cnt = async q => { try { return (await f.getCountFromServer(q)).data().count; } catch (e) { console.warn(e); return null; } };
+  const d1 = TODAY, d7 = addDays(TODAY, -6), d14 = addDays(TODAY, -13), d30 = addDays(TODAY, -29);
+  const metrics = {};
+  (await f.getDocs(f.query(Col("metrics"), f.where(f.documentId(), ">=", d30), f.where(f.documentId(), "<=", d1)))).docs.forEach(d => (metrics[d.id] = d.data()));
+  const recent = (await f.getDocs(f.query(users, f.where("created", ">=", d30)))).docs.map(d => d.data()).filter(u => u.created <= d1);
+  const sum = (key, from) => Object.entries(metrics).filter(([day]) => day >= from && day <= d1).reduce((a, [, m]) => a + (m[key] || 0), 0);
+  const days = [...Array(14)].map((_, i) => addDays(d14, i));
+  return {
+    days,
+    visits: days.map(d => metrics[d]?.landingVisits || 0),
+    signups: days.map(d => recent.filter(u => u.created === d).length),
+    visitorsToday: sum("landingVisits", d1), visitors7: sum("landingVisits", d7), visitors30: sum("landingVisits", d30),
+    views30: sum("landingViews", d30), app30: sum("appVisits", d30), demo30: sum("demoOpens", d30),
+    signups7: recent.filter(u => u.created >= d7).length, signups30: recent.length,
+    clubs30: clubs.filter(c => (c.created || "") >= d30).length,
+    totalUsers: await cnt(users),
+    active1: await cnt(f.query(users, f.where("lastSeen", "==", d1))),
+    active7: await cnt(f.query(users, f.where("lastSeen", ">=", d7))),
+    active30: await cnt(f.query(users, f.where("lastSeen", ">=", d30))),
+    members: clubs.reduce((a, c) => a + (typeof c.count === "number" ? c.count : 0), 0),
+  };
+}
+function usageChart(u) {
+  const W0 = 640, H = 170, L = 30, B = 22, n = u.days.length, gw = (W0 - L) / n;
+  const top = Math.max(4, ...u.visits, ...u.signups); const step = top <= 10 ? 2 : top <= 50 ? 10 : Math.ceil(top / 5 / 10) * 10; const max = Math.ceil(top / step) * step;
+  const y = v => (H - B) - v / max * (H - B - 8);
+  let svg = `<svg class="chart" viewBox="0 0 ${W0} ${H}" role="img" aria-label="Visitors and new accounts per day for the last 14 days">`;
+  for (let v = 0; v <= max; v += step) svg += `<line x1="${L}" x2="${W0}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
+  u.days.forEach((d, i) => {
+    const x = L + i * gw + 4, bw = (gw - 10) / 2;
+    svg += `<rect x="${x}" y="${y(u.visits[i])}" width="${bw}" height="${(H - B) - y(u.visits[i])}" rx="2" fill="var(--accent)"><title>${fmtDay(d)}: ${u.visits[i]} visitors</title></rect>`;
+    svg += `<rect x="${x + bw + 2}" y="${y(u.signups[i])}" width="${bw}" height="${(H - B) - y(u.signups[i])}" rx="2" fill="var(--brand)"><title>${fmtDay(d)}: ${u.signups[i]} new accounts</title></rect>`;
+    if (i % 2 === 1 || i === n - 1) svg += `<text x="${x + gw / 2 - 5}" y="${H - 6}" text-anchor="middle">${dObj(d).getDate()}/${dObj(d).getMonth() + 1}</text>`;
+  });
+  return el("div", {}, el("div", { html: svg + "</svg>" }),
+    el("div", { class: "row", style: "gap:16px;font-size:13px;margin-top:4px" }, el("span", { class: "row", style: "gap:6px" }, el("i", { style: "width:10px;height:10px;border-radius:2px;background:var(--accent);display:inline-block" }), "Visitors to the front page"), el("span", { class: "row", style: "gap:6px" }, el("i", { style: "width:10px;height:10px;border-radius:2px;background:var(--brand);display:inline-block" }), "New accounts")));
+}
+function usagePanel() {
+  const u = adminState.usage;
+  if (!u) return el("section", { class: "panel" }, el("h3", {}, "Usage"), el("div", { class: "empty" }, "Usage numbers couldn’t be loaded. Check the latest firestore.rules are published."));
+  const n = v => v == null ? "—" : v.toLocaleString();
+  const steps = [["Visited the front page", u.visitors30], ["Opened the app", u.app30], ["Tried the demo", u.demo30], ["Created an account", u.signups30], ["Created a club", u.clubs30]];
+  const base = Math.max(1, u.visitors30);
+  return el("section", { class: "stack" },
+    el("div", { class: "tiles" },
+      tile("Visitors today", n(u.visitorsToday), "", `${n(u.visitors7)} this week · ${n(u.visitors30)} in 30 days`),
+      tile("Accounts", n(u.totalUsers), "", `${n(u.signups7)} new this week · ${n(u.signups30)} in 30 days`),
+      tile("Active users", n(u.active7), "", `this week · ${n(u.active1)} today · ${n(u.active30)} in 30 days`),
+      tile("Clubs", n(adminState.clubs.length), "", `${n(u.members)} members in total`)),
+    el("div", { class: "grid2" },
+      el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Last 14 days")), usageChart(u)),
+      el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Last 30 days"), el("span", { class: "muted" }, "From visit to club")),
+        el("div", { class: "stack", style: "gap:10px" }, steps.map(([label, v]) => el("div", {},
+          el("div", { class: "row", style: "justify-content:space-between;font-size:14px" }, el("span", {}, label), el("b", { class: "num" }, `${n(v)}${v != null && u.visitors30 ? ` · ${Math.round(100 * v / base)}%` : ""}`)),
+          el("div", { class: "bar", style: "height:8px" }, el("span", { style: `width:${v ? Math.min(100, Math.round(100 * v / base)) : 0}%` }))))),
+        el("p", { class: "muted", style: "margin:12px 0 0;font-size:12px" }, `Visitors are counted once per browser tab per day, without cookies (${n(u.views30)} page views in 30 days). People with “Do Not Track” switched on aren’t counted. Active means signed in to the app that day.`))));
 }
 async function setPaid(c, mode) {
   const f = F.f; let until = null;
@@ -1344,6 +1407,8 @@ function adminPage() {
   const search = el("input", { id: "adm-q", value: adminState.q, placeholder: "Search by club, owner email or club reference", style: "width:100%", oninput: e => { adminState.q = e.target.value; clearTimeout(adminState.t); adminState.t = setTimeout(() => { render(); const i = $("#adm-q"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); } });
   return el("div", { class: "stack", style: "padding-block:20px" },
     el("div", { class: "row", style: "justify-content:space-between" }, el("div", {}, el("div", { class: "label" }, "Admin"), el("h2", {}, "Clubs and subscriptions")), el("div", { class: "row" }, el("button", { class: "btn", onclick: openAdmin }, "Refresh"), el("button", { class: "btn", onclick: () => { S.phase = "clubs"; render(); } }, "Back"))),
+    adminState.loading ? null : usagePanel(),
+    el("h3", { style: "margin-top:8px" }, "Subscriptions"),
     el("div", { class: "tiles" }, tile("Paying", counts.paid), tile("On trial", counts.trial), tile("Read-only", counts.expired), tile("Early access", counts.legacy)),
     el("section", { class: "panel" },
       el("p", { class: "muted", style: "margin:0 0 10px;font-size:14px" }, "When you get a payment email, find the club here by its reference (shown on the order as club_id, or client_reference_id on Stripe) or the owner’s email, then press +1 month or +1 year. Each payment extends from today or from the current paid-until date, whichever is later."),
@@ -1365,7 +1430,7 @@ function adminPage() {
 }
 
 /* ---------- demo team (local only, never saved) ---------- */
-function startDemo() { S.demo = true; Object.assign(S, demoData()); S.demoMe = "coach"; S.view = null; S.phase = "club"; render(); }
+function startDemo() { count("demoOpens", true); S.demo = true; Object.assign(S, demoData()); S.demoMe = "coach"; S.view = null; S.phase = "club"; render(); }
 function exitDemo() { S.demo = false; resetClubData(); S.authMode = "signup"; S.phase = S.user ? "clubs" : "auth"; render(); }
 function openDemoPicker() {
   const btn = m => el("button", { type: "button", "aria-pressed": m.id === S.demoMe ? "true" : "false", onclick: () => { S.demoMe = m.id; S.view = null; closeModal(); render(); toast(`Now viewing as ${m.name}`); } }, who(m));

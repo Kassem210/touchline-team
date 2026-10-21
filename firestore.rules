@@ -29,7 +29,23 @@ service cloud.firestore {
     }
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
-      allow get: if isAdmin();
+      allow read: if isAdmin(); // for the usage numbers on the admin screen
+    }
+    // anonymous daily visit counters: anyone can add exactly 1 to one known counter; only the admin reads them
+    function metricKeys() { return ['landingViews', 'landingVisits', 'appVisits', 'demoOpens']; }
+    match /metrics/{day} {
+      allow read: if isAdmin();
+      allow create: if day.matches('^20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(metricKeys()) && request.resource.data.size() == 1
+        && request.resource.data.values()[0] == 1;
+      allow update: if request.resource.data.keys().hasOnly(metricKeys())
+        && request.resource.data.diff(resource.data).affectedKeys().size() == 1
+        && metricUp('landingViews') && metricUp('landingVisits') && metricUp('appVisits') && metricUp('demoOpens');
+    }
+    // a counter either stays the same or goes up by exactly one
+    function metricUp(k) {
+      return request.resource.data.get(k, 0) == resource.data.get(k, 0)
+        || request.resource.data.get(k, 0) == resource.data.get(k, 0) + 1;
     }
     // feedback sent from the app; only the site owner can read it
     match /appFeedback/{id} {

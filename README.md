@@ -10,6 +10,12 @@ The app for sports teams and clubs: football, basketball, tennis, gymnastics or 
 - A demo team on the sign-in page lets anyone look around first.
 - **Legal basics**: privacy policy and terms pages; at sign-up everyone confirms their age, agrees to the terms and separately agrees to coaches seeing their logs; players under 16 need a parent or guardian's name, email and agreement; AI food scanning is only offered to people 16 and over; anyone can download all their data or delete their account; club owners can delete a club and everything in it. If you change the policy or terms, bump `LEGAL_VERSION` in `app.js` and everyone is asked to agree again.
 
+## Usage numbers
+
+The top of the admin screen shows visitors (today, this week, 30 days), accounts and new sign-ups, active users (people who used the app that day), clubs and members, a 14-day chart of visitors and new accounts, and a 30-day funnel from visit → app → demo → account → club.
+
+Visits are counted by `count.js`, which adds 1 to a daily total in `metrics/<date>`. There are no cookies or identifiers, a session flag stops reloads counting twice, and visitors with Do Not Track switched on aren't counted. The rules only let anyone add exactly 1 to one of the known counters; only the admin can read them. Active users come from a `lastSeen` date saved on each account once a day.
+
 ## Feedback from testers
 
 Everyone can press **Send feedback** in the account menu (or on the clubs page). Messages appear at the bottom of your admin screen, newest first. While online payment isn't set up, club owners near the end of their trial see **Get in touch** instead of **Subscribe**, which sends you a message too. Extend a test club from the admin screen with **+1 month**.
@@ -47,6 +53,7 @@ Plain HTML, CSS and JavaScript. No build step.
 | `site-info.js` | Your name, contact email and country, shown in the legal pages |
 | `privacy.html`, `terms.html`, `legal.js` | Privacy policy and terms of use |
 | `help.html` | Guides for coaches and players |
+| `count.js` | Anonymous daily visit counter |
 | `manifest.webmanifest`, `*.png` | App icon, "Add to Home Screen" support and the link preview image |
 | `firestore.rules` | Database security rules, pasted into Firebase |
 
