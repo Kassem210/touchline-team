@@ -1,20 +1,20 @@
 /* Layout: a clubhouse app — header with crest, tab row, then panels. Jersey-number badges identify every player. */
 :root{
-  --bg:#F1F4F0; --surface:#FFFFFF; --surface-2:#E7ECE6; --ink:#13211A; --muted:#5A6A61; --line:#D4DBD3;
+  --bg:#F2F4F7; --surface:#FFFFFF; --surface-2:#E8ECF2; --ink:#131F34; --muted:#5A6578; --line:#D6DCE5; --brand:#6DB04F; --brand-text:#3D8A2B;
   --accent:#2343C4; --accent-soft:#E3E8FB; --on-accent:#FFFFFF; --card:#E7AF0C;
   --good:#1E8549; --good-soft:#DDF1E4; --warn:#B26F00; --warn-soft:#FBEBCB; --bad:#C5372C; --bad-soft:#F9DEDB;
-  --shadow:0 1px 2px rgba(19,33,26,.06),0 4px 16px rgba(19,33,26,.05);
+  --shadow:0 1px 2px rgba(19,31,52,.06),0 4px 16px rgba(19,31,52,.06);
   --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#0D1411; --surface:#141E19; --surface-2:#1B2721; --ink:#E5ECE7; --muted:#93A399; --line:#28362E;
-  --accent:#8199FF; --accent-soft:#1E2852; --on-accent:#0D1411; --card:#F2C232;
+  --bg:#0E1626; --surface:#152035; --surface-2:#1C2942; --ink:#E7ECF3; --muted:#97A3B6; --line:#2A3852;
+  --accent:#8199FF; --accent-soft:#1E2852; --on-accent:#0E1626; --brand-text:#7CC45C; --card:#F2C232;
   --good:#52C482; --good-soft:#163323; --warn:#E8A63E; --warn-soft:#3A2B10; --bad:#F2695D; --bad-soft:#3D1A17;
   --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark }}
 :root[data-theme="dark"]{
-  --bg:#0D1411; --surface:#141E19; --surface-2:#1B2721; --ink:#E5ECE7; --muted:#93A399; --line:#28362E;
-  --accent:#8199FF; --accent-soft:#1E2852; --on-accent:#0D1411; --card:#F2C232;
+  --bg:#0E1626; --surface:#152035; --surface-2:#1C2942; --ink:#E7ECF3; --muted:#97A3B6; --line:#2A3852;
+  --accent:#8199FF; --accent-soft:#1E2852; --on-accent:#0E1626; --brand-text:#7CC45C; --card:#F2C232;
   --good:#52C482; --good-soft:#163323; --warn:#E8A63E; --warn-soft:#3A2B10; --bad:#F2695D; --bad-soft:#3D1A17;
   --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark }
 *{box-sizing:border-box}
@@ -199,7 +199,7 @@ h2{font-size:26px} h3{font-size:20px}
 .quick .kind-ico{width:38px;height:38px;font-size:18px}
 
 /* modal */
-#modal{position:fixed;inset:0;z-index:50;background:rgba(10,18,14,.5);display:flex;align-items:flex-end;justify-content:center;padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+#modal{position:fixed;inset:0;z-index:50;background:rgba(10,16,30,.55);display:flex;align-items:flex-end;justify-content:center;padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
 @media (min-width:640px){#modal{align-items:center}}
 .sheet{background:var(--surface);border-radius:16px;width:min(560px,100%);max-height:100%;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .sheet header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
@@ -304,3 +304,11 @@ h2{font-size:26px} h3{font-size:20px}
 .banner.locked{background:var(--bad-soft);border-color:var(--bad)}
 .banner.locked b{color:var(--bad)}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--surface-2);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+
+/* ---------- logo ---------- */
+.brand-mark{display:block;height:44px;width:auto;flex:none}
+.logo-d{display:none}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .logo-l{display:none} :root:not([data-theme="light"]) .logo-d{display:inline-block} }
+:root[data-theme="dark"] .logo-l{display:none}
+:root[data-theme="dark"] .logo-d{display:inline-block}
+.loading .brand-mark{height:64px;margin:0 auto 14px;animation:pulse 1.4s ease-in-out infinite}

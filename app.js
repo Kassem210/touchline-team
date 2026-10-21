@@ -42,6 +42,7 @@ const store = {
 };
 let toastT;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3600); }
+const brandMark = () => el("img", { class: "brand-mark", src: "logo-mark.png", alt: "Touchline Team logo", width: 94, height: 44 });
 const initials = n => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from(crypto.getRandomValues(new Uint32Array(6)), n => CODE_ALPHABET[n % CODE_ALPHABET.length]).join("");
@@ -439,12 +440,12 @@ function go(view, focus) { S.view = view; S.focus = focus || null; render(); scr
 function render() {
   const nowDay = iso(new Date()); if (nowDay !== TODAY) TODAY = nowDay;
   const app = $("#app");
-  if (S.phase === "boot" || S.phase === "loading") { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, el("div", { class: "crest" }, "TL"), el("h2", {}, S.phase === "boot" ? "Touchline Team" : "Opening the clubhouse"), el("p", { class: "muted" }, "Loading…")))); return; }
+  if (S.phase === "boot" || S.phase === "loading") { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, brandMark(), el("h2", {}, S.phase === "boot" ? "Touchline Team" : "Opening the clubhouse"), el("p", { class: "muted" }, "Loading…")))); return; }
   if (S.phase === "auth") { app.replaceChildren(authPage()); return; }
   if (S.phase === "clubs") { app.replaceChildren(clubsPage()); return; }
   if (S.phase === "consent") { app.replaceChildren(consentPage()); return; }
   if (S.phase === "admin") { app.replaceChildren(adminPage()); return; }
-  if (!S.club || !me()) { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, el("div", { class: "crest" }, "TL"), el("h2", {}, "Opening the clubhouse"), el("p", { class: "muted" }, "Loading your squad…")))); return; }
+  if (!S.club || !me()) { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, brandMark(), el("h2", {}, "Opening the clubhouse"), el("p", { class: "muted" }, "Loading your squad…")))); return; }
   const coach = isCoach();
   const tabs = coach ? [["today", "Today"], ["squad", "Squad"], ["schedule", "Schedule"], ["board", "Board"]] : [["home", "Home"], ["log", "My log"], ["me", "My season"], ["board", "Board"]];
   if (!S.view || (!tabs.some(t => t[0] === S.view) && S.view !== "player")) S.view = tabs[0][0];
@@ -514,7 +515,7 @@ function authPage() {
   }
   const titles = { signin: "Sign in", signup: "Create your account", reset: "Reset your password" };
   return el("div", { class: "auth" }, el("div", { class: "auth-card" },
-    el("div", { class: "auth-brand" }, el("div", { class: "crest" }, "TL"), el("div", {}, el("h1", {}, "Touchline Team"), el("p", {}, "Training, food, attendance and form for coaches and players."))),
+    el("div", { class: "auth-brand" }, brandMark(), el("div", {}, el("h1", {}, "Touchline Team"), el("p", {}, "Training, food, attendance and form for coaches and players."))),
     S.fbError ? el("div", { class: "err" }, S.fbError) : null,
     pendingJoin && mode !== "reset" ? el("div", { class: "ok" }, `You’ve been invited to join a club (code ${pendingJoin}). Sign in or create an account to join.`) : null,
     el("h2", {}, titles[mode]),
@@ -561,7 +562,7 @@ function consentPage() {
   const err = el("div", { class: "err", hidden: !S.authMsg?.err }, S.authMsg?.err || "");
   const updated = !!S.profile?.consent;
   return el("div", { class: "auth" }, el("div", { class: "auth-card" },
-    el("div", { class: "auth-brand" }, el("div", { class: "crest" }, "TL"), el("div", {}, el("h1", {}, updated ? "We’ve updated our terms" : "Before you start"), el("p", {}, S.user?.email || ""))),
+    el("div", { class: "auth-brand" }, brandMark(), el("div", {}, el("h1", {}, updated ? "We’ve updated our terms" : "Before you start"), el("p", {}, S.user?.email || ""))),
     el("p", { style: "margin:0" }, updated ? "Please read the updated privacy policy and terms and agree to continue." : "Please confirm a few things so we can look after your data properly."),
     err,
     el("form", { onsubmit: async e => {
