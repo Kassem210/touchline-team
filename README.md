@@ -73,6 +73,8 @@ Optional: **Authentication → Templates** changes the password-reset email. **A
 
 1. In this repository: **Settings → Pages** → **Deploy from a branch** → branch `main`, folder `/ (root)` → **Save**.
 2. A minute later the front page is live at `https://<your-username>.github.io/touchline-team/` and the app at `.../touchline-team/app.html`.
+
+This site is live at **https://touchlineteam.com** (domain from Orange Egypt hosting; DNS has four A records to GitHub Pages and a `www` CNAME to `kassem210.github.io`; the `CNAME` file in this repo tells GitHub which domain to serve).
 3. For your own domain, type it under **Custom domain** in the same page and add the DNS record your domain company asks for (a CNAME pointing to `<your-username>.github.io`), then tick **Enforce HTTPS**. Remember to add that domain to Firebase's authorized domains too.
 
 ## Run it locally
