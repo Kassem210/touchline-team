@@ -2,7 +2,7 @@
 window.TEAM_SITE = {
   appName: "Touchline Team",
   operator: "Aly Kassem",
-  email: "FILL IN: a contact email for privacy questions",
+  email: "touchline.teams@gmail.com",
   country: "Egypt",
   dataRegion: "Europe (eur3, Belgium and the Netherlands)",
   updated: "19 October 2026",
