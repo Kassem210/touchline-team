@@ -9,7 +9,8 @@ const FB_VER = "12.19.0";
 // Bump this when the privacy policy or terms change in a way people need to agree to again
 const LEGAL_VERSION = "2026-10-19";
 // Gemini models for the food estimate, tried in order (the alias keeps working as Google releases new versions)
-const AI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash"];
+// tried in order; the lite model is fast and reliable, the others are backups
+const AI_MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.8-flash"];
 const FB_BASE = window.TEAM_FB_BASE || `https://www.gstatic.com/firebasejs/${FB_VER}`;
 const EMU = window.TEAM_EMULATOR || null; // local testing only: { host, authPort, fsPort }
 
@@ -952,7 +953,7 @@ async function getFoodModel(modelName) {
     } });
     aiCache = { m, ai, schema, models: {} };
   }
-  if (!aiCache.models[modelName]) aiCache.models[modelName] = aiCache.m.getGenerativeModel(aiCache.ai, { model: modelName, generationConfig: { responseMimeType: "application/json", responseSchema: aiCache.schema, temperature: 0.2 } });
+  if (!aiCache.models[modelName]) aiCache.models[modelName] = aiCache.m.getGenerativeModel(aiCache.ai, { model: modelName, generationConfig: { responseMimeType: "application/json", responseSchema: aiCache.schema, temperature: 0.2, maxOutputTokens: 2048 } });
   return aiCache.models[modelName];
 }
 const FOOD_PROMPT = `You are a sports nutritionist helping athletes log what they eat.
@@ -969,18 +970,24 @@ async function estimateFood({ text, image }) {
   for (const name of AI_MODELS) {
     try {
       const model = await getFoodModel(name);
-      const res = await model.generateContent(parts);
-      return JSON.parse(res.response.text());
+      let timer;
+      const res = await Promise.race([model.generateContent(parts), new Promise((_, rej) => (timer = setTimeout(() => rej(new Error("timeout")), 25000)))]).finally(() => clearTimeout(timer));
+      const out = JSON.parse(res.response.text());
+      // reject glitchy answers, e.g. a number with hundreds of digits
+      const sane = v => v == null || (typeof v === "number" && isFinite(v) && v >= 0 && v <= 5000);
+      if (!Array.isArray(out.items) || !out.items.every(i => ["kcal", "protein", "carbs", "fat"].every(k => sane(i[k])))) throw new Error("bad answer");
+      return out;
     } catch (e) {
       lastErr = e; console.warn("food estimate failed with", name, e);
-      if (!/not.?found|404|unsupported|deprecated/i.test(String(e && (e.message || e.code)))) break; // only move on to the next model if this one doesn't exist
+      // move on to the next model if this one is missing, busy or too slow; stop on other errors (e.g. AI Logic switched off)
+      if (!/not.?found|404|unsupported|deprecated|no longer available|high demand|overloaded|unavailable|\b50[03]\b|timeout|bad answer|JSON/i.test(String(e && (e.message || e.code)) + " " + String(e && e.name))) break;
     }
   }
   throw lastErr;
 }
 function aiErr(e) {
   const msg = String((e && e.message) || "") + " " + String((e && e.code) || "");
-  if (/quota|\b429\b|RESOURCE_EXHAUSTED/i.test(msg)) return "The food scanner is busy or has hit today’s limit. Try again in a minute, or fill in the numbers yourself.";
+  if (/quota|\b429\b|RESOURCE_EXHAUSTED|high demand|overloaded|timeout|\b50[03]\b/i.test(msg)) return "The food scanner is busy or has hit today’s limit. Try again in a minute, or fill in the numbers yourself.";
   if (/Failed to fetch|NetworkError|network error|Load failed|ERR_/i.test(msg)) return "Couldn’t reach the food scanner. Check your connection and try again.";
   if (/api-not-enabled|has not been used|SERVICE_DISABLED|is disabled|\b403\b|PERMISSION_DENIED/i.test(msg)) return "Food scanning isn’t switched on yet. The site owner needs to turn on AI Logic in Firebase.";
   return "The food scanner couldn’t work this one out. Try a clearer photo or add a description.";
