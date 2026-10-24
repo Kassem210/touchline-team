@@ -965,6 +965,7 @@ async function estimateFood({ text, image }) {
   if (window.TEAM_AI_MOCK) return window.TEAM_AI_MOCK({ text, image });
   const parts = [FOOD_PROMPT];
   if (text) parts.push(`The athlete describes the meal as: "${text.slice(0, 400)}"`);
+  if (window.TL_LANG === "ar") parts.push("Write every name, portion and the summary in Arabic (Egyptian everyday food names are fine). Keep the numbers as digits.");
   if (image) parts.push({ inlineData: { mimeType: "image/jpeg", data: image } });
   let lastErr;
   for (const name of AI_MODELS) {
