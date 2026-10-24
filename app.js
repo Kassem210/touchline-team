@@ -235,7 +235,7 @@ async function openClub(id) {
   }
   S.role = mem.data().role;
   store.set("team.lastClub." + uid, id);
-  const f = F.f; const cutoffLogs = addDays(TODAY, -42);
+  const f = F.f; const cutoffLogs = addDays(TODAY, -70); // enough for a full "last month" report
   listen(CD(), s => { if (s.exists()) { S.club = s.data(); queueRender(); } });
   listen(CC("members"), s => {
     S.members = docsOf(s);
@@ -412,6 +412,31 @@ function copyBtn(text, label = "Copy") {
     try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; setTimeout(() => (b.textContent = label), 1500); }
     catch { const i = b.parentElement.querySelector("input"); if (i) { i.select(); toast("Press Ctrl+C (or Cmd+C) to copy"); } }
   } }, label);
+}
+
+/* ---------- WhatsApp sharing ---------- */
+const inAr = () => window.TL_LANG === "ar";
+const L = (en, ar) => inAr() ? ar : en; // for text that leaves the page (WhatsApp messages, reports)
+const WA_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 01-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 00-.7.3 3 3 0 00-.9 2.2c0 1.3.9 2.5 1 2.7.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>';
+function waBtn(text, label = "Share on WhatsApp", cls = "btn small") {
+  return el("a", { class: cls + " wa", href: "https://wa.me/?text=" + encodeURIComponent(text), target: "_blank", rel: "noopener" }, el("span", { html: WA_SVG, style: "display:inline-flex" }), label);
+}
+const joinLink = () => `${appUrl()}?join=${S.club?.joinCode || ""}${inAr() ? "&lang=ar" : ""}`;
+const longDay = d => dObj(d).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+function waInvite() {
+  const c = S.club?.name || "", code = S.club?.joinCode || "";
+  return L(`Join ${c} on Touchline Team 👋\nOpen this link to join the squad:\n${joinLink()}\n\nOr sign up at touchlineteam.com and enter the club code: ${code}`,
+    `انضم إلى ${c} على Touchline Team 👋\nافتح الرابط للانضمام للفريق:\n${joinLink()}\n\nأو سجّل على touchlineteam.com واكتب كود النادي: ${code}`);
+}
+function waSession(s) {
+  const kind = s.kind === "match" ? L(sport().match, "مباراة") : L("Training", "تمرين");
+  const when = [longDay(s.date), s.time].filter(Boolean).join(" · ");
+  return L(`⚽ ${S.club?.name || ""}\n${kind}: ${s.title}\n📅 ${when}${s.location ? "\n📍 " + s.location : ""}\n\nTell me if you’re coming in Touchline Team: ${appUrl()}${inAr() ? "?lang=ar" : ""}`,
+    `⚽ ${S.club?.name || ""}\n${kind}: ${s.title}\n📅 ${when}${s.location ? "\n📍 " + s.location : ""}\n\nقولّي هتيجي ولا لأ على Touchline Team: ${appUrl()}?lang=ar`);
+}
+function waAnn(a) {
+  const squad = (a.squad || []).map(byId).filter(Boolean).sort((x, y) => numOr(x.number) - numOr(y.number)).map(m => `${m.number ? "#" + m.number + " " : ""}${m.name}`);
+  return `📣 ${a.title}${a.body ? "\n" + a.body : ""}${squad.length ? "\n\n" + squad.join("\n") : ""}\n\n— ${S.club?.name || ""} · Touchline Team`;
 }
 
 /* ---------- modal ---------- */
@@ -755,7 +780,7 @@ function nextCard(s, coach) {
     el("div", { class: "date" }, el("div", { class: "d" }, d.getDate()), el("div", { class: "w" }, d.toLocaleDateString(undefined, { weekday: "short" }))),
     el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match + " day" : "Training"), el("span", { class: "m" }, rel(s.date))), el("h3", {}, s.title), el("div", { class: "m" }, [s.time, s.location].filter(Boolean).join(" · ")), extra,
       !coach ? el("div", { class: "m" }, mine ? (mine.going ? "You said you’ll be there" : "You said you can’t make it" + (mine.reason ? `: ${mine.reason}` : "")) : "Let your coach know if you’re coming") : null),
-    coach ? el("button", { class: "btn", onclick: () => takeAttendance(s) }, "Take register") : el("div", { class: "row" }, el("button", { class: "btn", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there"), el("button", { class: "btn", style: "background:transparent;color:inherit;border-color:currentColor", onclick: () => cantMake(s) }, "Can’t make it")));
+    coach ? el("div", { class: "row" }, el("button", { class: "btn", onclick: () => takeAttendance(s) }, "Take register"), waBtn(waSession(s), "WhatsApp", "btn")) : el("div", { class: "row" }, el("button", { class: "btn", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there"), el("button", { class: "btn", style: "background:transparent;color:inherit;border-color:currentColor", onclick: () => cantMake(s) }, "Can’t make it")));
 }
 function cantMake(s) {
   modal("Can’t make it", [el("p", { class: "muted", style: "margin:0" }, `${s.title}, ${fmtDay(s.date)}`), field("Reason (your coach sees this)", el("input", { id: "rs-reason", name: "reason", required: true, placeholder: "e.g. School exam, ill, family event" }))], { label: "Tell my coach", submit: fd => A.setRsvp(s, false, fd.get("reason").trim()) });
@@ -827,7 +852,7 @@ function vPlayer(id, asCoach) {
     asCoach ? el("div", {}, el("button", { class: "back", onclick: () => go("today") }, "← Back to squad")) : null,
     el("section", { class: "panel phero" }, jersey(p, true),
       el("div", { class: "n" }, el("div", { class: "label" }, p.position || "Player"), el("h2", {}, p.name), el("div", { class: "muted" }, `Attendance ${pct == null ? "—" : pct + "%"} · Trained ${minutes7(id)} min this week · Avg rating ${avg == null ? "—" : avg.toFixed(1)}`)),
-      asCoach ? el("div", { class: "row" }, el("button", { class: "btn ghost", onclick: () => { S.preview = id; S.view = "home"; render(); scrollTo({ top: 0 }); } }, "See their view"), el("button", { class: "btn", onclick: () => editPlan(id) }, "New plan"), el("button", { class: "btn primary", onclick: () => giveFeedback(id) }, "Give feedback")) : null),
+      asCoach ? el("div", { class: "row" }, el("button", { class: "btn ghost", onclick: () => { S.preview = id; S.view = "home"; render(); scrollTo({ top: 0 }); } }, "See their view"), el("button", { class: "btn", onclick: () => editPlan(id) }, "New plan"), el("button", { class: "btn", onclick: () => openReport(id) }, "Monthly report"), el("button", { class: "btn primary", onclick: () => giveFeedback(id) }, "Give feedback")) : null),
     el("section", { class: "panel" },
       el("div", { class: "panel-head" }, el("h3", {}, `Season ${S.club?.season || ""} stats`), asCoach ? el("button", { class: "btn small", onclick: () => editStats(id) }, "Update stats") : null),
       el("div", { class: "tiles" }, sport().stats.map(([k, l]) => tile(l, st[k] ?? "—")))),
@@ -905,6 +930,100 @@ function fbCard(x, asCoach) {
     x.kind === "instruction" ? el("div", { class: "row", style: "margin-top:8px;justify-content:flex-end" },
       x.ack ? el("span", { class: "pill good" }, "✓ Got it") : (!asCoach && !S.preview && x.uid === me().id ? el("button", { class: "btn small primary", onclick: () => A.ackFb(x) }, "Got it") : el("span", { class: "pill warn" }, "Not confirmed yet"))) : null,
     asCoach ? el("div", { class: "row", style: "justify-content:flex-end;margin-top:4px" }, el("button", { class: "btn small ghost danger", onclick: () => confirmDel("Delete this message?", () => A.deleteFb(x)) }, "Delete")) : null);
+}
+
+/* ---------- monthly report ---------- */
+// month is "YYYY-MM"; the report covers that month up to today
+function monthRange(month) {
+  const [y, m] = month.split("-").map(Number);
+  const start = `${month}-01`; const last = iso(new Date(y, m, 0));
+  return { start, end: last < TODAY ? last : TODAY, label: new Date(y, m - 1, 15).toLocaleDateString(undefined, { month: "long", year: "numeric" }) };
+}
+function reportData(id, month) {
+  const { start, end, label } = monthRange(month); const inM = d => d >= start && d <= end;
+  const reg = register(id, 500).filter(x => inM(x.s.date));
+  const cnt = k => reg.filter(x => x.a.status === k).length;
+  const counted = reg.filter(x => x.a.status !== "excused");
+  const attended = counted.filter(x => x.a.status === "present" || x.a.status === "late").length;
+  const ratings = reg.filter(x => x.a.rating).map(x => ({ v: +x.a.rating, s: x.s })).reverse();
+  const days = Object.entries(S.days[id] || {}).filter(([d]) => inM(d));
+  const workouts = days.flatMap(([, d]) => d.workouts || []);
+  const mealDays = days.filter(([, d]) => (d.meals || []).length);
+  const dayTotals = mealDays.map(([, d]) => totals(d.meals));
+  const avg = k => dayTotals.length ? Math.round(dayTotals.reduce((a, t) => a + t[k], 0) / dayTotals.length) : null;
+  const tg = targetsOf(id);
+  const proteinHit = tg.protein ? dayTotals.filter(t => t.protein >= tg.protein * 0.9).length : null;
+  const byType = {}; workouts.forEach(w => (byType[w.kind] = (byType[w.kind] || 0) + (+w.duration || 0)));
+  const plans = S.plans.filter(p => p.uid === id && (inM(p.date || "") || (p.due && inM(p.due))));
+  const planItems = plans.reduce((a, p) => a + (p.items || []).length, 0);
+  const planDone = plans.reduce((a, p) => a + (p.items || []).filter((_, i) => (p.ticks || [])[i]).length, 0);
+  const fbs = S.feedback.filter(f => f.uid === id && inM(f.date || "")).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  return { start, end, label, reg, present: cnt("present"), late: cnt("late"), absent: cnt("absent"), excused: cnt("excused"),
+    pct: counted.length ? Math.round(100 * attended / counted.length) : null, ratings,
+    avgRating: ratings.length ? ratings.reduce((a, r) => a + r.v, 0) / ratings.length : null,
+    workouts: workouts.length, minutes: workouts.reduce((a, w) => a + (+w.duration || 0), 0), byType,
+    mealDays: mealDays.length, dayCount: Math.round((dObj(end) - dObj(start)) / 864e5) + 1, avgKcal: avg("kcal"), avgProtein: avg("protein"), tg, proteinHit,
+    plans: plans.length, planItems, planDone, fbs };
+}
+function reportView(id, month, note) {
+  const p = byId(id); const r = reportData(id, month); const c = S.club || {}; const st = statsOf(id);
+  const box = (label, v, sub) => el("div", { class: "rbox" }, el("div", { class: "rl" }, label), el("div", { class: "rv" }, v), sub ? el("div", { class: "rs" }, sub) : null);
+  const dash = "—";
+  const typeTxt = Object.entries(r.byType).sort((a, b) => b[1] - a[1]).map(([k, m]) => `${L(k, window.tlT ? window.tlT(k) : k)} ${m} ${L("min", "د")}`).join(" · ");
+  return el("div", { class: "report", dir: inAr() ? "rtl" : "ltr", translate: "no" },
+    el("div", { class: "rhead" },
+      el("img", { src: "logo-mark.png", alt: "", width: 64, height: 30 }),
+      el("div", {}, el("div", { class: "rk" }, L("Monthly player report", "التقرير الشهري للاعب")), el("div", { class: "rt" }, r.label))),
+    el("div", { class: "rplayer" }, jersey(p, true), el("div", {}, el("h2", {}, p.name), el("div", { class: "muted" }, [c.name, p.position, p.number ? "#" + p.number : null].filter(Boolean).join(" · ")))),
+    note ? el("div", { class: "rsec rnote", style: "margin:0 0 16px" }, el("h3", {}, L("Coach’s note", "كلمة المدرب")), el("p", {}, note)) : null,
+    el("div", { class: "rgrid" },
+      box(L("Attendance", "الحضور"), r.pct == null ? dash : r.pct + "%", r.reg.length ? L(`${r.present + r.late} of ${r.reg.length - r.excused} sessions${r.late ? ` (${r.late} late)` : ""}${r.excused ? ` · ${r.excused} excused` : ""}`, `${r.present + r.late} من ${r.reg.length - r.excused} مواعيد${r.late ? ` (${r.late} متأخر)` : ""}${r.excused ? ` · ${r.excused} بعذر` : ""}`) : L("No registers this month", "لا يوجد تسجيل حضور هذا الشهر")),
+      box(L("Coach rating", "تقييم المدرب"), r.avgRating == null ? dash : el("bdi", { dir: "ltr" }, r.avgRating.toFixed(1) + " / 10"), r.ratings.length ? L(`Average of ${r.ratings.length} sessions · best ${Math.max(...r.ratings.map(x => x.v))}`, `متوسط ${r.ratings.length} مواعيد · الأفضل ${Math.max(...r.ratings.map(x => x.v))}`) : L("No ratings this month", "لا توجد تقييمات هذا الشهر")),
+      box(L("Training logged", "التمارين المسجّلة"), r.workouts ? `${r.minutes} ${L("min", "دقيقة")}` : dash, r.workouts ? L(`${r.workouts} workouts`, `${r.workouts} تمارين`) + (typeTxt ? " · " + typeTxt : "") : L("No workouts logged", "لم تُسجّل تمارين")),
+      box(L("Food logged", "الأكل المسجّل"), [el("bdi", { dir: "ltr" }, `${r.mealDays} / ${r.dayCount}`), " " + L("days", "يوم")], r.avgKcal != null ? L(`Avg ${r.avgKcal} kcal · ${r.avgProtein} g protein a day${r.tg.kcal ? ` (target ${r.tg.kcal} kcal)` : ""}`, `متوسط ${r.avgKcal} سعرة · ${r.avgProtein} جم بروتين يوميًا${r.tg.kcal ? ` (الهدف ${r.tg.kcal} سعرة)` : ""}`) + (r.proteinHit != null ? L(` · protein target hit on ${r.proteinHit} days`, ` · حقق هدف البروتين في ${r.proteinHit} يوم`) : "") : L("No meals logged", "لم تُسجّل وجبات"))),
+    r.ratings.length ? el("div", { class: "rsec" }, el("h3", {}, L("Ratings by session", "التقييم في كل موعد")),
+      el("div", { class: "rbars" }, r.ratings.map(x => el("div", { class: "rbar" }, el("i", { style: `height:${x.v * 10}%;background:${x.v >= 7.5 ? "var(--good)" : x.v >= 6 ? "var(--muted)" : "var(--bad)"}` }), el("b", {}, x.v % 1 ? x.v.toFixed(1) : x.v), el("span", {}, dObj(x.s.date).getDate()))))) : null,
+    r.plans ? el("div", { class: "rsec" }, el("h3", {}, L("Training plans", "خطط التدريب")), el("p", {}, L(`${r.planDone} of ${r.planItems} tasks done across ${r.plans} plan${r.plans > 1 ? "s" : ""}.`, `أنجز ${r.planDone} من ${r.planItems} مهام في ${r.plans} خطة.`))) : null,
+    Object.keys(st).length ? el("div", { class: "rsec" }, el("h3", {}, L(`Season ${c.season || ""} stats`, `إحصائيات موسم ${c.season || ""}`)),
+      el("div", { class: "rstats" }, sport().stats.filter(([k]) => st[k] != null && st[k] !== "").map(([k, l]) => el("div", {}, el("b", {}, st[k]), el("span", {}, L(l, window.tlT ? window.tlT(l) : l)))))) : null,
+    r.fbs.length ? el("div", { class: "rsec" }, el("h3", {}, L("Coach feedback this month", "ملاحظات المدرب هذا الشهر")), r.fbs.map(f => el("blockquote", {}, f.text, el("cite", {}, `${f.author || L("Coach", "المدرب")} · ${fmtDay(f.date)}`)))) : null,
+    el("div", { class: "rfoot" }, L(`${c.name || ""} · made with Touchline Team · touchlineteam.com`, `${c.name || ""} · تم إعداده بواسطة Touchline Team · touchlineteam.com`)));
+}
+function reportText(id, month, note) {
+  const p = byId(id); const r = reportData(id, month); const c = S.club || {};
+  const lines = [L(`📋 ${p.name} · ${r.label} report`, `📋 تقرير ${p.name} · ${r.label}`), c.name || "", "",
+    L(`✅ Attendance: ${r.pct == null ? "—" : r.pct + "%"}${r.reg.length ? ` (${r.present + r.late} of ${r.reg.length - r.excused} sessions)` : ""}`, `✅ الحضور: ${r.pct == null ? "—" : r.pct + "%"}${r.reg.length ? ` (${r.present + r.late} من ${r.reg.length - r.excused} مواعيد)` : ""}`),
+    r.avgRating != null ? L(`⭐ Average coach rating: ${r.avgRating.toFixed(1)}/10`, `⭐ متوسط تقييم المدرب: ${r.avgRating.toFixed(1)}/10`) : null,
+    r.workouts ? L(`💪 Training logged: ${r.minutes} min in ${r.workouts} workouts`, `💪 التمارين المسجّلة: ${r.minutes} دقيقة في ${r.workouts} تمارين`) : null,
+    r.avgKcal != null ? L(`🍽️ Food logged on ${r.mealDays} days · avg ${r.avgKcal} kcal, ${r.avgProtein} g protein`, `🍽️ سجّل أكله ${r.mealDays} يوم · متوسط ${r.avgKcal} سعرة و${r.avgProtein} جم بروتين`) : null,
+    r.plans ? L(`📝 Plan tasks done: ${r.planDone}/${r.planItems}`, `📝 مهام الخطة المنجزة: ${r.planDone}/${r.planItems}`) : null,
+    note ? "" : null, note ? L(`Coach’s note: ${note}`, `كلمة المدرب: ${note}`) : null, "", "— Touchline Team"];
+  return lines.filter(x => x !== null).join("\n");
+}
+function openReport(id) {
+  const months = [0, 1, 2].map(i => { const d = dObj(TODAY); d.setDate(1); d.setMonth(d.getMonth() - i); return iso(d).slice(0, 7); });
+  let month = months[0];
+  const preview = el("div", { class: "rpreview" });
+  const note = el("textarea", { id: "r-note", name: "note", maxlength: 800, rows: 3, placeholder: "e.g. Great month. Keep working on your first touch and eat a proper breakfast before training." });
+  const share = el("div", { class: "row" });
+  const draw = () => { preview.replaceChildren(reportView(id, month, note.value.trim())); share.replaceChildren(waBtn(reportText(id, month, note.value.trim()), "Send summary on WhatsApp", "btn")); };
+  const pick = sel("r-month", "month", months.map(m => [m, monthRange(m).label]), month);
+  pick.addEventListener("change", () => { month = pick.value; draw(); });
+  note.addEventListener("input", draw);
+  modal("Monthly report · " + byId(id).name, [
+    el("div", { class: "fields2" }, field("Month", pick)),
+    field("Coach’s note (optional, shown on the report)", note),
+    preview, share,
+    el("p", { class: "muted", style: "margin:0;font-size:13px" }, "Print it, save it as a PDF to send to parents, or send the short summary on WhatsApp."),
+  ], { label: "Print or save as PDF", submit: () => { printReport(reportView(id, month, note.value.trim())); return false; } });
+  draw();
+}
+function printReport(node) {
+  let root = $("#print-root"); if (!root) { root = el("div", { id: "print-root" }); document.body.append(root); }
+  root.replaceChildren(node); document.body.classList.add("printing");
+  const done = () => { document.body.classList.remove("printing"); root.replaceChildren(); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  setTimeout(() => window.print(), 50);
 }
 
 /* ---------- logs ---------- */
@@ -1091,6 +1210,7 @@ function invitePanel(first) {
     el("div", { class: "panel-head" }, el("h3", {}, first ? "Add your players" : "Invite players"), (isOwner() || S.demo) ? el("button", { class: "btn small ghost", onclick: () => confirmDel("Make a new code? The current code and link will stop working for anyone who hasn’t joined yet.", A.newJoinCode, "Make new code") }, "New code") : null),
     el("p", { class: "muted", style: "margin:0 0 10px" }, "Players create a free account and enter this code, or just open the link. They appear in your squad as soon as they join."),
     el("div", { class: "row", style: "gap:16px;align-items:center" }, el("div", { class: "code", "aria-label": "Club code" }, code), el("div", { class: "copyrow", style: "flex:1;min-width:220px" }, el("input", { id: "invite-link", value: link, readonly: true, "aria-label": "Invite link" }), copyBtn(link, "Copy link"))),
+    el("div", { class: "row", style: "margin-top:10px" }, waBtn(waInvite(), "Share on WhatsApp", "btn")),
     el("p", { class: "muted", style: "margin:10px 0 0;font-size:13px" }, "Assistant coaches join with the same code. The club owner can then make them a coach."));
 }
 function vSquad() {
@@ -1165,7 +1285,7 @@ function sessRow(s, coach) {
       r ? el("span", { class: "pill " + (r.going ? "good" : "bad") }, r.going ? "Going" : "Can’t make it") : null,
       (!r || !r.going) ? el("button", { class: "btn small", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there") : null,
       (!r || r.going) ? el("button", { class: "btn small ghost", onclick: () => cantMake(s) }, "Can’t make it") : null) : null,
-    coach ? el("div", { class: "row" }, el("button", { class: "btn small " + (isPast && !s.taken ? "primary" : ""), onclick: () => takeAttendance(s) }, s.taken ? "Edit register" : "Register"), el("button", { class: "btn small ghost", onclick: () => editSession(s) }, "Edit")) : null);
+    coach ? el("div", { class: "row" }, el("button", { class: "btn small " + (isPast && !s.taken ? "primary" : ""), onclick: () => takeAttendance(s) }, s.taken ? "Edit register" : "Register"), el("button", { class: "btn small ghost", onclick: () => editSession(s) }, "Edit"), !isPast ? waBtn(waSession(s), "WhatsApp") : null) : null);
 }
 function vSchedule() {
   const all = sessionsSorted(); const up = all.filter(s => s.date >= TODAY); const done = all.filter(s => s.date < TODAY).reverse();
@@ -1220,7 +1340,7 @@ function annCard(a, coach) {
     el("div", { class: "row" }, el("span", { class: "pill " + (a.kind === "squad" ? "match" : "") }, a.kind === "squad" ? sport().match + "-day squad" : "Notice"), el("span", { class: "muted", style: "font-size:12px" }, `${a.author || "Coach"} · ${rel(a.date)}`)),
     el("h3", {}, a.title), a.body ? el("p", {}, a.body) : null,
     squad.length ? el("div", { class: "chips" }, squad.map(m => el("span", { class: "sqchip" + (m.id === me().id ? " me" : "") }, el("i", {}, m.number || "–"), m.name))) : null,
-    coach ? el("div", { class: "row", style: "margin-top:8px" }, el("button", { class: "btn small ghost danger", onclick: () => confirmDel("Delete this post?", () => A.deleteAnn(a)) }, "Delete")) : null);
+    coach ? el("div", { class: "row", style: "margin-top:8px" }, waBtn(waAnn(a)), el("button", { class: "btn small ghost danger", onclick: () => confirmDel("Delete this post?", () => A.deleteAnn(a)) }, "Delete")) : null);
 }
 function postAnn() {
   const box = el("div", { class: "field", hidden: true }, el("span", {}, "Squad"), el("div", { class: "checks" }, players().map(p => el("label", {}, el("input", { type: "checkbox", name: "squad", value: p.id }), `#${p.number || "–"} ${p.name}`))));

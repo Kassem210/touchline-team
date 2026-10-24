@@ -200,7 +200,7 @@
     "Squad average, recorded sessions": "متوسط الفريق في المواعيد المسجّلة", "Needs attention": "يحتاج انتباهك", "Enter": "إدخال", "Register": "الحضور",
     "Squad today": "الفريق اليوم", " · tap a player for their full profile": " · اضغط على لاعب لرؤية ملفه", "tap a player for their full profile": "اضغط على لاعب لرؤية ملفه",
     "Carbs · fat": "كربوهيدرات · دهون", "Training today": "تمرين اليوم", "Form": "المستوى", "No meals yet": "لا توجد وجبات بعد", "Nothing yet": "لا شيء بعد",
-    "Match day": "يوم المباراة", "or": "أو", "line is the target": "الخط هو الهدف", "present": "حاضر", "late": "متأخر", "absent": "غائب", "excused": "بعذر", "MATCH DAY": "يوم المباراة",
+    "Match day": "يوم المباراة", "Share on WhatsApp": "شارك على واتساب", "WhatsApp": "واتساب", "Monthly report": "التقرير الشهري", "Send summary on WhatsApp": "أرسل الملخص على واتساب", "Print or save as PDF": "اطبع أو احفظ PDF", "Month": "الشهر", "Coach’s note (optional, shown on the report)": "كلمة المدرب (اختياري، تظهر في التقرير)", "Print it, save it as a PDF to send to parents, or send the short summary on WhatsApp.": "اطبعه أو احفظه PDF لإرساله لأولياء الأمور، أو أرسل الملخص القصير على واتساب.", "e.g. Great month. Keep working on your first touch and eat a proper breakfast before training.": "مثال: شهر رائع. استمر في تحسين الاستلام الأول وافطر كويس قبل التمرين.", "or": "أو", "line is the target": "الخط هو الهدف", "present": "حاضر", "late": "متأخر", "absent": "غائب", "excused": "بعذر", "MATCH DAY": "يوم المباراة",
     // player profile
     "Player not found.": "اللاعب غير موجود.", "← Back to squad": "→ العودة للفريق", "See their view": "شاهد ما يراه", "New plan": "خطة جديدة",
     "Give feedback": "أرسل ملاحظة", "Update stats": "تحديث الإحصائيات", "Recent form": "المستوى مؤخرًا", "Coach rating per session, 1–10": "تقييم المدرب لكل موعد، من 1 إلى 10",
@@ -430,6 +430,7 @@
     [/^Ends (.*)\. Subscribe any time to keep everything running after that\.$/, function (m) { return "تنتهي في " + m[1] + ". اشترك في أي وقت ليستمر كل شيء بعدها."; }],
     [/^Paid until (.*)\. Renews automatically each month\.$/, function (m) { return "مدفوع حتى " + m[1] + ". يتجدد تلقائيًا كل شهر."; }],
     [/^(.+) per club, unlimited players and coaches\. Cancel any time\. Club reference: $/, function (m) { return t(m[1]) + " لكل نادٍ، بعدد غير محدود من اللاعبين والمدربين. ألغِ في أي وقت. مرجع النادي: "; }],
+    [/^Monthly report · (.+)$/, function (m) { return "التقرير الشهري · " + m[1]; }],
     [/^Now viewing as (.+)$/, function (m) { return "تشاهد الآن كـ " + m[1]; }],
     [/^Squad for (.+?), (Today|Tomorrow|Yesterday)$/, function (m) { return "التشكيلة لـ " + t(m[1]) + "، " + t(m[2]); }],
     [/^Squad for (.+)$/, function (m) { return "التشكيلة لـ " + (m[1] === "the next match" ? "المباراة القادمة" : t(m[1])); }],

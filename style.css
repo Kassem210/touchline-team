@@ -312,3 +312,52 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;bac
 :root[data-theme="dark"] .logo-l{display:none}
 :root[data-theme="dark"] .logo-d{display:inline-block}
 .loading .brand-mark{height:64px;margin:0 auto 14px;animation:pulse 1.4s ease-in-out infinite}
+
+/* WhatsApp share buttons */
+.btn.wa{background:#25D366;border-color:#25D366;color:#fff;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn.wa:hover{filter:brightness(1.05);border-color:#1EBE5A}
+
+/* monthly player report (shown in the dialog and printed) */
+.rpreview{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+.report{background:#fff;color:#131F34;padding:22px;font-size:14px;line-height:1.45;--muted:#5A6578;--line:#D6DCE5;--good:#2E8B57;--bad:#C8452F}
+.report .rhead{display:flex;align-items:center;gap:14px;border-bottom:3px solid #6DB04F;padding-bottom:12px;margin-bottom:16px}
+.report .rk{font-family:var(--f-display);font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:#3D8A2B}
+.report .rt{font-family:var(--f-display);font-weight:800;font-size:26px;line-height:1}
+.report .rplayer{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.report .rplayer h2{margin:0;font-size:26px}
+.report .rplayer .jersey{background:#131F34;color:#fff}
+.report .rgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.report .rbox{border:1px solid #D6DCE5;border-radius:12px;padding:12px}
+.report .rl{font-family:var(--f-display);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5A6578}
+.report .rv{font-family:var(--f-display);font-weight:800;font-size:30px;line-height:1.1;margin-top:4px}
+.report .rs{color:#5A6578;font-size:12.5px;margin-top:4px}
+.report .rsec{margin-top:18px}
+.report .rsec h3{font-size:17px;margin:0 0 8px}
+.report .rsec p{margin:0}
+.report .rbars{display:flex;align-items:flex-end;gap:8px;height:120px;border-bottom:1px solid #D6DCE5;padding-bottom:2px}
+.report .rbar{flex:1;max-width:44px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative}
+.report .rbar i{display:block;width:100%;border-radius:5px 5px 0 0}
+.report .rbar b{position:absolute;top:-2px;font-size:11px}
+.report .rbar span{position:absolute;bottom:-18px;font-size:11px;color:#5A6578}
+.report .rbars{margin-bottom:22px}
+.report .rstats{display:flex;flex-wrap:wrap;gap:10px}
+.report .rstats div{border:1px solid #D6DCE5;border-radius:10px;padding:8px 12px;min-width:90px}
+.report .rstats b{display:block;font-family:var(--f-display);font-size:24px;line-height:1}
+.report .rstats span{color:#5A6578;font-size:12px}
+.report blockquote{margin:0 0 8px;padding:10px 12px;background:#F2F4F7;border-radius:10px;border-inline-start:4px solid #6DB04F}
+.report blockquote cite{display:block;font-style:normal;color:#5A6578;font-size:12px;margin-top:4px}
+.report .rnote p{padding:12px;border:1px dashed #6DB04F;border-radius:10px;white-space:pre-wrap}
+.report .rfoot{margin-top:20px;padding-top:10px;border-top:1px solid #D6DCE5;color:#5A6578;font-size:12px;text-align:center}
+@media (max-width:520px){.report{padding:14px}.report .rgrid{grid-template-columns:1fr}}
+#print-root{display:none}
+@media print{
+  body.printing>*:not(#print-root){display:none!important}
+  body.printing #print-root{display:block}
+  body.printing{background:#fff;padding:0}
+  #print-root .report{padding:0;font-size:12.5px}
+  #print-root .report .rv{font-size:26px}
+  #print-root .report .rbars{height:90px}
+  #print-root .report .rsec{margin-top:12px}
+  #print-root .report .rbox,#print-root .report .rsec{break-inside:avoid}
+  @page{margin:14mm}
+}
