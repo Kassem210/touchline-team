@@ -28,6 +28,7 @@ function el(tag, props, ...kids) {
   for (const c of kids.flat(Infinity)) { if (c == null || c === false) continue; e.append(c.nodeType ? c : document.createTextNode(String(c))); }
   return e;
 }
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad = n => String(n).padStart(2, "0");
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 let TODAY = iso(new Date());
@@ -417,6 +418,7 @@ function copyBtn(text, label = "Copy") {
 /* ---------- WhatsApp sharing ---------- */
 const inAr = () => window.TL_LANG === "ar";
 const L = (en, ar) => inAr() ? ar : en; // for text that leaves the page (WhatsApp messages, reports)
+const say = L; // same thing, for code where L is already a local name (the charts)
 const WA_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 01-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 00-.7.3 3 3 0 00-.9 2.2c0 1.3.9 2.5 1 2.7.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>';
 function waBtn(text, label = "Share on WhatsApp", cls = "btn small") {
   return el("a", { class: cls + " wa", href: "https://wa.me/?text=" + encodeURIComponent(text), target: "_blank", rel: "noopener" }, el("span", { html: WA_SVG, style: "display:inline-flex" }), label);
@@ -467,6 +469,7 @@ function queueRender() { if (rq) return; rq = true; requestAnimationFrame(() => 
 function go(view, focus) { S.view = view; S.focus = focus || null; render(); scrollTo({ top: 0 }); }
 
 function render() {
+  try { chartTip.hide(); } catch {} // a redraw replaces the charts, so drop any open label
   const nowDay = iso(new Date()); if (nowDay !== TODAY) TODAY = nowDay;
   const app = $("#app");
   if (S.phase === "boot" || S.phase === "loading") { app.replaceChildren(el("div", { class: "loading" }, el("div", {}, brandMark(), el("h2", {}, S.phase === "boot" ? "Touchline Team" : "Opening the clubhouse"), el("p", { class: "muted" }, "Loading…")))); return; }
@@ -875,7 +878,9 @@ function formChart(id) {
   let s = `<svg class="chart" viewBox="0 0 ${W0} ${H}" role="img" aria-label="Ratings for the last ${r.length} sessions">`;
   [2, 4, 6, 8, 10].forEach(v => { const y = (H - B) - v / 10 * (H - B - 6); s += `<line x1="${L}" x2="${W0}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y + 3}" text-anchor="end">${v}</text>`; });
   r.forEach((x, i) => { const v = +x.a.rating; const h = v / 10 * (H - B - 6); const cx = L + i * bw + 4; const col = v >= 7.5 ? "var(--good)" : v >= 6 ? "var(--muted)" : "var(--bad)"; const d = dObj(x.s.date);
-    s += `<rect x="${cx}" y="${H - B - h}" width="${bw - 8}" height="${h}" rx="3" fill="${col}"/><text x="${cx + (bw - 8) / 2}" y="${H - 5}" text-anchor="middle">${d.getDate()}/${d.getMonth() + 1}</text>`; });
+    const tip = [fmtDay(x.s.date), say("Rating", "التقييم") + " " + (v % 1 ? v.toFixed(1) : v) + "/10", x.s.title].filter(Boolean).join("\n");
+    s += `<rect class="cbar" data-i="${i}" x="${cx}" y="${H - B - h}" width="${bw - 8}" height="${h}" rx="3" fill="${col}"/><text x="${cx + (bw - 8) / 2}" y="${H - 5}" text-anchor="middle">${d.getDate()}/${d.getMonth() + 1}</text>`;
+    s += `<rect class="hit" data-i="${i}" data-top="${H - B - h}" data-tip="${esc(tip)}" x="${L + i * bw}" y="0" width="${bw}" height="${H - B}" fill="transparent"/>`; });
   return el("div", { html: s + "</svg>" });
 }
 function kcalChart(id) {
@@ -887,7 +892,11 @@ function kcalChart(id) {
   let s = `<svg class="chart" viewBox="0 0 ${W0} ${H}" role="img" aria-label="Calories per day for the last 14 days">`;
   [0, top / 2, top].forEach(v => { s += `<line x1="${L}" x2="${W0}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 5}" y="${y(v) + 3}" text-anchor="end">${v}</text>`; });
   vals.forEach((v, i) => { const x = L + i * bw + 2;
-    s += `<rect x="${x}" y="${y(v)}" width="${bw - 4}" height="${Math.max((H - B) - y(v), 0)}" rx="2" fill="${days[i] === TODAY ? "var(--card)" : "var(--accent)"}"/>`;
+    const t = totals(mealsOn(id, days[i]));
+    const tip = [fmtDay(days[i]), v ? `${r0(v).toLocaleString()} ${say("kcal", "سعرة")}${tg ? " / " + tg.toLocaleString() : ""}` : say("Nothing logged", "لم يُسجّل شيء"),
+      v ? `${say("P", "بروتين")} ${r0(t.protein)} ${say("g", "جم")} · ${say("C", "كارب")} ${r0(t.carbs)} ${say("g", "جم")} · ${say("F", "دهون")} ${r0(t.fat)} ${say("g", "جم")}` : null].filter(Boolean).join("\n");
+    s += `<rect class="cbar" data-i="${i}" x="${x}" y="${y(v)}" width="${bw - 4}" height="${Math.max((H - B) - y(v), 0)}" rx="2" fill="${days[i] === TODAY ? "var(--card)" : "var(--accent)"}"/>`;
+    s += `<rect class="hit" data-i="${i}" data-top="${y(v)}" data-tip="${esc(tip)}" x="${L + i * bw}" y="0" width="${bw}" height="${H - B}" fill="transparent"/>`;
     if (i % 2 === 1) s += `<text x="${x + (bw - 4) / 2}" y="${H - 5}" text-anchor="middle">${dObj(days[i]).getDate()}</text>`; });
   if (tg) s += `<line x1="${L}" x2="${W0}" y1="${y(tg)}" y2="${y(tg)}" stroke="var(--good)" stroke-width="2" stroke-dasharray="5 4"/>`;
   return el("div", { html: s + "</svg>" });
@@ -1025,6 +1034,34 @@ function printReport(node) {
   window.addEventListener("afterprint", done);
   setTimeout(() => window.print(), 50);
 }
+
+/* ---------- chart labels: tap (or hover) a bar to see its exact numbers ---------- */
+const chartTip = (() => {
+  let tipEl = null, cur = null;
+  const hide = () => { if (tipEl) tipEl.hidden = true; if (cur) { cur.svg.classList.remove("focus"); cur.svg.querySelectorAll("rect.cbar.on").forEach(r => r.classList.remove("on")); } cur = null; };
+  const show = hit => {
+    const svg = hit.ownerSVGElement; if (!svg) return;
+    if (cur && cur.hit === hit) return;
+    hide();
+    if (!tipEl) { tipEl = el("div", { id: "chart-tip", role: "status" }); document.body.append(tipEl); }
+    const i = hit.getAttribute("data-i");
+    svg.classList.add("focus"); svg.querySelectorAll(`rect.cbar[data-i="${i}"]`).forEach(r => r.classList.add("on"));
+    tipEl.replaceChildren(...hit.getAttribute("data-tip").split("\n").map((line, k) => el(k ? "div" : "b", {}, line)));
+    tipEl.hidden = false;
+    const box = hit.getBoundingClientRect(), sb = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+    const top = sb.top + (+hit.getAttribute("data-top") / vb.height) * sb.height;
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    const x = Math.max(8, Math.min(innerWidth - w - 8, box.left + box.width / 2 - w / 2));
+    const yy = top - h - 10 < 8 ? top + 12 : top - h - 10;
+    tipEl.style.left = x + "px"; tipEl.style.top = yy + "px";
+    cur = { hit, svg };
+  };
+  document.addEventListener("pointerdown", e => { const hit = e.target.closest && e.target.closest("svg.chart rect.hit"); if (hit) show(hit); else hide(); });
+  document.addEventListener("pointerover", e => { if (e.pointerType !== "mouse") return; const hit = e.target.closest && e.target.closest("svg.chart rect.hit"); if (hit) show(hit); });
+  document.addEventListener("pointerout", e => { if (e.pointerType !== "mouse" || !cur) return; if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest("svg.chart rect.hit")) hide(); });
+  addEventListener("scroll", hide, { passive: true }); addEventListener("resize", hide);
+  return { hide };
+})();
 
 /* ---------- logs ---------- */
 function logLine(l) {
