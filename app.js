@@ -879,16 +879,21 @@ function vToday() {
   const ps = players(); const fl = flags();
   if (!ps.length) return [nextCard(upcoming()[0], true), invitePanel(true)];
   const fed = ps.filter(p => mealsOn(p.id, TODAY).length);
-  const avg = k => fed.length ? fed.reduce((s, p) => s + totals(mealsOn(p.id, TODAY))[k], 0) / fed.length : null;
+  const trained = ps.filter(p => workoutsOn(p.id, TODAY).length);
+  const trainedMin = trained.reduce((a, p) => a + workoutsOn(p.id, TODAY).reduce((b, w) => b + (+w.duration || 0), 0), 0);
+  // plans still running (no end date, or ending today or later)
+  const ids = new Set(ps.map(p => p.id));
+  const live = S.plans.filter(pl => ids.has(pl.uid) && (!pl.due || pl.due >= TODAY) && (pl.items || []).length);
+  const tasks = live.reduce((a, pl) => a + pl.items.length, 0);
+  const done = live.reduce((a, pl) => a + pl.items.filter((_, i) => (pl.ticks || [])[i]).length, 0);
   const pcts = ps.map(p => attPct(p.id)).filter(v => v != null);
   const teamAtt = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
-  const aK = avg("kcal"), aP = avg("protein");
   return [
     nextCard(upcoming()[0], true),
     el("div", { class: "tiles" },
       tile("Logged food today", fed.length, `/${ps.length}`, "Players with at least one meal"),
-      tile("Avg calories today", aK == null ? "—" : r0(aK), aK == null ? "" : "kcal", "Players who logged food"),
-      tile("Avg protein today", aP == null ? "—" : r0(aP), aP == null ? "" : "g", "Players who logged food"),
+      tile("Trained today", trained.length, `/${ps.length}`, trained.length ? `${trainedMin} min logged in total` : "No workouts logged yet"),
+      tile("Plan tasks done", tasks ? Math.round(100 * done / tasks) : "—", tasks ? "%" : "", tasks ? `${done} of ${tasks} tasks in current plans` : "No plans running"),
       tile("Attendance", teamAtt == null ? "—" : teamAtt, teamAtt == null ? "" : "%", "Squad average, recorded sessions")),
     fl.length ? el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Needs attention"), el("span", { class: "pill " + (fl.some(f => f.sev === "bad") ? "bad" : "warn") }, fl.length)),
       el("ul", { class: "flags" }, fl.slice(0, 10).map(f => el("li", { class: "flag " + f.sev, tabindex: 0, onclick: f.act || (() => go("player", f.m.id)), onkeydown: e => e.key === "Enter" && e.currentTarget.click() }, f.m ? jersey(f.m) : el("span", { class: "pill accent" }, "Register"), el("span", {}, f.text))))) : null,
