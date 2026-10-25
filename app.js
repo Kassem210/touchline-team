@@ -441,6 +441,68 @@ function waAnn(a) {
   return `📣 ${a.title}${a.body ? "\n" + a.body : ""}${squad.length ? "\n\n" + squad.join("\n") : ""}\n\n— ${S.club?.name || ""} · Touchline Team`;
 }
 
+/* ---------- add to calendar ---------- */
+// Sessions have no length, so training counts as 90 minutes and a match as 2 hours.
+const sessMinutes = s => s.kind === "match" ? 120 : 90;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function icsText(sessions) {
+  const esc2 = v => String(v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  const fold = line => { const out = []; while (line.length > 74) { out.push(line.slice(0, 74)); line = " " + line.slice(74); } out.push(line); return out.join("\r\n"); };
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  const local = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const club = S.club?.name || "Touchline Team";
+  const url = appUrl() + (inAr() ? "?lang=ar" : "");
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Touchline Team//Schedule//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:" + esc2(club)];
+  sessions.forEach(x => {
+    const kind = x.kind === "match" ? say(sport().match, "مباراة") : say("Training", "تمرين");
+    lines.push("BEGIN:VEVENT", `UID:${x.id}-${S.clubId || "demo"}@touchlineteam.com`, "DTSTAMP:" + stamp);
+    if (x.time) {
+      const [h, m] = x.time.split(":").map(Number); const start = dObj(x.date); start.setHours(h, m || 0, 0, 0);
+      const end = new Date(start.getTime() + sessMinutes(x) * 60000);
+      lines.push("DTSTART:" + local(start), "DTEND:" + local(end));
+    } else {
+      lines.push("DTSTART;VALUE=DATE:" + x.date.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addDays(x.date, 1).replace(/-/g, ""));
+    }
+    lines.push("SUMMARY:" + esc2(`${kind}: ${x.title} · ${club}`));
+    if (x.location) lines.push("LOCATION:" + esc2(x.location));
+    lines.push("DESCRIPTION:" + esc2(say(`Tell your coach if you’re coming: ${url}`, `قول لمدربك إذا كنت هتحضر: ${url}`)), "URL:" + url);
+    if (x.time) lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + esc2(`${kind}: ${x.title}`), "TRIGGER:-PT2H", "END:VALARM");
+    lines.push("END:VEVENT");
+  });
+  lines.push("END:VCALENDAR");
+  return lines.map(fold).join("\r\n") + "\r\n";
+}
+function downloadIcs(sessions, name) {
+  const ics = icsText(sessions);
+  if (isIOS()) { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); return; } // iPhone and iPad open this straight in Calendar
+  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+  const a = el("a", { href: url, download: (name || "touchline-schedule") + ".ics" }); document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function googleCalUrl(x) {
+  const kind = x.kind === "match" ? say(sport().match, "مباراة") : say("Training", "تمرين");
+  let dates;
+  if (x.time) { const [h, m] = x.time.split(":").map(Number); const st = dObj(x.date); st.setHours(h, m || 0, 0, 0); const en = new Date(st.getTime() + sessMinutes(x) * 60000);
+    const f = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`; dates = f(st) + "/" + f(en); }
+  else dates = x.date.replace(/-/g, "") + "/" + addDays(x.date, 1).replace(/-/g, "");
+  const q = new URLSearchParams({ action: "TEMPLATE", text: `${kind}: ${x.title} · ${S.club?.name || ""}`, dates, details: say("Tell your coach if you’re coming: ", "قول لمدربك إذا كنت هتحضر: ") + appUrl(), location: x.location || "" });
+  return "https://calendar.google.com/calendar/render?" + q.toString();
+}
+const CAL_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+function calBtn(sessions, opts = {}) {
+  return el("button", { type: "button", class: (opts.cls || "btn small ghost") + " cal", onclick: () => openCalendar(sessions) }, el("span", { html: CAL_SVG, style: "display:inline-flex" }), opts.label || "Add to calendar");
+}
+function openCalendar(sessions) {
+  const one = sessions.length === 1 ? sessions[0] : null;
+  modal(one ? "Add to calendar" : "Add all sessions to your calendar", [
+    el("p", { class: "muted", style: "margin:0" }, one ? `${one.title} · ${[fmtDay(one.date), one.time].filter(Boolean).join(" · ")}` : `${sessions.length} upcoming sessions. You get a reminder 2 hours before each one.`),
+    el("div", { class: "stack", style: "gap:8px" },
+      el("button", { type: "button", class: "btn primary", onclick: () => { downloadIcs(sessions, one ? "touchline-session" : "touchline-schedule"); closeModal(); } }, "iPhone, iPad, Outlook or other calendar"),
+      one ? el("a", { class: "btn", href: googleCalUrl(one), target: "_blank", rel: "noopener", onclick: () => closeModal() }, "Google Calendar") : null),
+    el("p", { class: "muted", style: "margin:0;font-size:13px" }, one ? "If the time or place changes later, add it again." : "On Android, open the downloaded file with Google Calendar. If the schedule changes later, add it again."),
+  ]);
+}
+
 /* ---------- modal ---------- */
 function closeModal() { const m = $("#modal"); m.hidden = true; m.replaceChildren(); }
 function modal(title, body, opts = {}) {
@@ -783,7 +845,7 @@ function nextCard(s, coach) {
     el("div", { class: "date" }, el("div", { class: "d" }, d.getDate()), el("div", { class: "w" }, d.toLocaleDateString(undefined, { weekday: "short" }))),
     el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match + " day" : "Training"), el("span", { class: "m" }, rel(s.date))), el("h3", {}, s.title), el("div", { class: "m" }, [s.time, s.location].filter(Boolean).join(" · ")), extra,
       !coach ? el("div", { class: "m" }, mine ? (mine.going ? "You said you’ll be there" : "You said you can’t make it" + (mine.reason ? `: ${mine.reason}` : "")) : "Let your coach know if you’re coming") : null),
-    coach ? el("div", { class: "row" }, el("button", { class: "btn", onclick: () => takeAttendance(s) }, "Take register"), waBtn(waSession(s), "WhatsApp", "btn")) : el("div", { class: "row" }, el("button", { class: "btn", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there"), el("button", { class: "btn", style: "background:transparent;color:inherit;border-color:currentColor", onclick: () => cantMake(s) }, "Can’t make it")));
+    coach ? el("div", { class: "row" }, el("button", { class: "btn", onclick: () => takeAttendance(s) }, "Take register"), waBtn(waSession(s), "WhatsApp", "btn"), calBtn([s], { cls: "btn on-dark", label: "Calendar" })) : el("div", { class: "row" }, el("button", { class: "btn", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there"), el("button", { class: "btn", style: "background:transparent;color:inherit;border-color:currentColor", onclick: () => cantMake(s) }, "Can’t make it"), calBtn([s], { cls: "btn on-dark", label: "Calendar" })));
 }
 function cantMake(s) {
   modal("Can’t make it", [el("p", { class: "muted", style: "margin:0" }, `${s.title}, ${fmtDay(s.date)}`), field("Reason (your coach sees this)", el("input", { id: "rs-reason", name: "reason", required: true, placeholder: "e.g. School exam, ill, family event" }))], { label: "Tell my coach", submit: fd => A.setRsvp(s, false, fd.get("reason").trim()) });
@@ -1321,13 +1383,13 @@ function sessRow(s, coach) {
     !coach && !s.taken && s.date >= TODAY ? el("div", { class: "row" },
       r ? el("span", { class: "pill " + (r.going ? "good" : "bad") }, r.going ? "Going" : "Can’t make it") : null,
       (!r || !r.going) ? el("button", { class: "btn small", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there") : null,
-      (!r || r.going) ? el("button", { class: "btn small ghost", onclick: () => cantMake(s) }, "Can’t make it") : null) : null,
-    coach ? el("div", { class: "row" }, el("button", { class: "btn small " + (isPast && !s.taken ? "primary" : ""), onclick: () => takeAttendance(s) }, s.taken ? "Edit register" : "Register"), el("button", { class: "btn small ghost", onclick: () => editSession(s) }, "Edit"), !isPast ? waBtn(waSession(s), "WhatsApp") : null) : null);
+      (!r || r.going) ? el("button", { class: "btn small ghost", onclick: () => cantMake(s) }, "Can’t make it") : null, calBtn([s], { label: "Calendar" })) : null,
+    coach ? el("div", { class: "row" }, el("button", { class: "btn small " + (isPast && !s.taken ? "primary" : ""), onclick: () => takeAttendance(s) }, s.taken ? "Edit register" : "Register"), el("button", { class: "btn small ghost", onclick: () => editSession(s) }, "Edit"), !isPast ? waBtn(waSession(s), "WhatsApp") : null, !isPast ? calBtn([s], { label: "Calendar" }) : null) : null);
 }
 function vSchedule() {
   const all = sessionsSorted(); const up = all.filter(s => s.date >= TODAY); const done = all.filter(s => s.date < TODAY).reverse();
   return [
-    el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Coming up"), el("button", { class: "btn primary small", onclick: () => editSession(null) }, "Add session")), up.length ? el("div", {}, up.map(s => sessRow(s, true))) : el("div", { class: "empty" }, "Nothing scheduled.")),
+    el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Coming up"), el("div", { class: "row" }, up.length ? calBtn(up, { label: "Add all to calendar" }) : null, el("button", { class: "btn primary small", onclick: () => editSession(null) }, "Add session"))), up.length ? el("div", {}, up.map(s => sessRow(s, true))) : el("div", { class: "empty" }, "Nothing scheduled.")),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Past sessions")), done.length ? el("div", {}, done.slice(0, 30).map(s => sessRow(s, true))) : el("div", { class: "empty" }, "No past sessions yet.")),
   ];
 }
@@ -1368,7 +1430,7 @@ function vBoard() {
   return [
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Team board"), coach ? el("button", { class: "btn primary small", onclick: postAnn }, "Post") : null),
       list.length ? el("div", { class: "stack" }, list.map(a => annCard(a, coach))) : el("div", { class: "empty" }, coach ? "Nothing posted yet. Post a notice or a match-day squad." : "No announcements yet.")),
-    !coach ? el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Schedule"), el("span", { class: "muted" }, "Tell your coach if you can make it")), ups.length ? el("div", {}, ups.map(s => sessRow(s, false))) : el("div", { class: "empty" }, "Nothing scheduled.")) : null,
+    !coach ? el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Schedule"), ups.length ? calBtn(sessionsSorted().filter(s => s.date >= TODAY), { label: "Add all to calendar" }) : el("span", { class: "muted" }, "Tell your coach if you can make it")), ups.length ? el("div", {}, ups.map(s => sessRow(s, false))) : el("div", { class: "empty" }, "Nothing scheduled.")) : null,
   ];
 }
 function annCard(a, coach) {
