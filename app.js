@@ -111,6 +111,13 @@ function logsOf(id) {
   return out.sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0));
 }
 const sessKey = s => s.date + " " + (s.time || "00:00");
+// "18:00–19:30" when the session has a length, otherwise just the start time
+function timeRange(s) {
+  if (!s.time) return "";
+  if (!(+s.duration > 0)) return s.time;
+  const [h, m] = s.time.split(":").map(Number); const end = h * 60 + (m || 0) + +s.duration;
+  return `${s.time}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)}`;
+}
 const sessionsSorted = () => [...S.sessions].sort((a, b) => sessKey(a).localeCompare(sessKey(b)));
 const upcoming = () => sessionsSorted().filter(s => s.date >= TODAY && !s.taken);
 const pastTaken = () => sessionsSorted().filter(s => s.taken).reverse();
@@ -432,7 +439,7 @@ function waInvite() {
 }
 function waSession(s) {
   const kind = s.kind === "match" ? L(sport().match, "مباراة") : L("Training", "تمرين");
-  const when = [longDay(s.date), s.time].filter(Boolean).join(" · ");
+  const when = [longDay(s.date), timeRange(s)].filter(Boolean).join(" · ");
   return L(`⚽ ${S.club?.name || ""}\n${kind}: ${s.title}\n📅 ${when}${s.location ? "\n📍 " + s.location : ""}\n\nTell me if you’re coming in Touchline Team: ${appUrl()}${inAr() ? "?lang=ar" : ""}`,
     `⚽ ${S.club?.name || ""}\n${kind}: ${s.title}\n📅 ${when}${s.location ? "\n📍 " + s.location : ""}\n\nقولّي هتيجي ولا لأ على Touchline Team: ${appUrl()}?lang=ar`);
 }
@@ -443,7 +450,7 @@ function waAnn(a) {
 
 /* ---------- add to calendar ---------- */
 // Sessions have no length, so training counts as 90 minutes and a match as 2 hours.
-const sessMinutes = s => s.kind === "match" ? 120 : 90;
+const sessMinutes = s => +s.duration > 0 ? +s.duration : s.kind === "match" ? 120 : 90;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 function icsText(sessions) {
   const esc2 = v => String(v || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
@@ -843,7 +850,7 @@ function nextCard(s, coach) {
   if (coach) { const c = rsvpCounts(s); extra = el("div", { class: "m" }, `${c.inN} available · ${c.outN} can’t make it · ${c.none} no reply`); }
   return el("div", { class: "next" },
     el("div", { class: "date" }, el("div", { class: "d" }, d.getDate()), el("div", { class: "w" }, d.toLocaleDateString(undefined, { weekday: "short" }))),
-    el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match + " day" : "Training"), el("span", { class: "m" }, rel(s.date))), el("h3", {}, s.title), el("div", { class: "m" }, [s.time, s.location].filter(Boolean).join(" · ")), extra,
+    el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match + " day" : "Training"), el("span", { class: "m" }, rel(s.date))), el("h3", {}, s.title), el("div", { class: "m" }, [timeRange(s), s.location].filter(Boolean).join(" · ")), extra,
       !coach ? el("div", { class: "m" }, mine ? (mine.going ? "You said you’ll be there" : "You said you can’t make it" + (mine.reason ? `: ${mine.reason}` : "")) : "Let your coach know if you’re coming") : null),
     coach ? el("div", { class: "row" }, el("button", { class: "btn", onclick: () => takeAttendance(s) }, "Take register"), waBtn(waSession(s), "WhatsApp", "btn"), calBtn([s], { cls: "btn on-dark", label: "Calendar" })) : el("div", { class: "row" }, el("button", { class: "btn", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there"), el("button", { class: "btn", style: "background:transparent;color:inherit;border-color:currentColor", onclick: () => cantMake(s) }, "Can’t make it"), calBtn([s], { cls: "btn on-dark", label: "Calendar" })));
 }
@@ -1377,7 +1384,7 @@ function sessRow(s, coach) {
   return el("div", { class: "sess" },
     el("div", { class: "date" }, el("div", { class: "d" }, d.getDate()), el("div", { class: "w" }, d.toLocaleDateString(undefined, { month: "short" }))),
     el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match : "Training"), el("b", {}, s.title)),
-      el("div", { class: "muted", style: "font-size:13px" }, [rel(s.date), s.time, s.location].filter(Boolean).join(" · ")),
+      el("div", { class: "muted", style: "font-size:13px" }, [rel(s.date), timeRange(s), s.location].filter(Boolean).join(" · ")),
       coach ? el("div", { style: "font-size:13px;color:" + (isPast && !s.taken ? "var(--warn)" : "var(--muted)") }, summary) : null),
     att ? el("span", { class: "pill " + ({ present: "good", late: "warn", absent: "bad" }[att.status] || "") }, att.status) : null,
     !coach && !s.taken && s.date >= TODAY ? el("div", { class: "row" },
@@ -1394,15 +1401,20 @@ function vSchedule() {
   ];
 }
 function editSession(s) {
+  const kindSeg = seg("kind", [["training", "Training"], ["match", sport().match]], s?.kind || "training");
+  const durSel = sel("se-dur", "duration", [["45", "45 min"], ["60", "1 hour"], ["75", "1 h 15 min"], ["90", "1 h 30 min"], ["105", "1 h 45 min"], ["120", "2 hours"], ["150", "2 h 30 min"], ["180", "3 hours"], ["240", "4 hours"]], String(s ? sessMinutes(s) : 90));
+  let durTouched = !!s?.duration; durSel.addEventListener("change", () => (durTouched = true));
+  kindSeg.addEventListener("change", e => { if (!durTouched) durSel.value = e.target.value === "match" ? "120" : "90"; });
   const repeat = !s ? field("Repeat weekly", sel("se-rep", "repeat", [["1", "Just once"], ["4", "4 weeks"], ["8", "8 weeks"], ["12", "12 weeks"]], "1")) : null;
   modal(s ? "Edit session" : "Add session", [
-    el("div", { class: "field" }, el("span", {}, "Type"), seg("kind", [["training", "Training"], ["match", sport().match]], s?.kind || "training")),
+    el("div", { class: "field" }, el("span", {}, "Type"), kindSeg),
     field("Title", el("input", { id: "se-title", name: "title", required: true, maxlength: 80, value: s?.title || "", placeholder: "e.g. Tactical session, or vs Northgate" })),
-    el("div", { class: "fields2" }, field("Date", el("input", { id: "se-date", type: "date", name: "date", required: true, value: s?.date || TODAY })), field("Time", el("input", { id: "se-time", type: "time", name: "time", value: s?.time || "18:00" })), repeat),
+    el("div", { class: "fields2" }, field("Date", el("input", { id: "se-date", type: "date", name: "date", required: true, value: s?.date || TODAY })), field("Time", el("input", { id: "se-time", type: "time", name: "time", value: s?.time || "18:00" })),
+      field("Duration", durSel), repeat),
     field("Location", el("input", { id: "se-loc", name: "location", maxlength: 80, value: s?.location || "", placeholder: "e.g. Pitch 2" })),
   ], { extra: s ? el("button", { type: "button", class: "btn ghost danger", style: "margin-right:auto", onclick: () => confirmDel("Delete this session and its register?", () => A.deleteSession(s)) }, "Delete") : null,
     submit: async fd => {
-      const data = { kind: fd.get("kind"), title: fd.get("title").trim(), date: fd.get("date"), time: fd.get("time"), location: fd.get("location").trim() };
+      const data = { kind: fd.get("kind"), title: fd.get("title").trim(), date: fd.get("date"), time: fd.get("time"), duration: +fd.get("duration") || 90, location: fd.get("location").trim() };
       if (s) return A.saveSession(s, data);
       const n = +(fd.get("repeat") || 1);
       for (let i = 0; i < n; i++) { const ok = await A.saveSession(null, { ...data, date: addDays(data.date, i * 7) }); if (!ok) return false; }
