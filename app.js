@@ -51,16 +51,60 @@ const newCode = () => Array.from(crypto.getRandomValues(new Uint32Array(6)), n =
 const cleanCode = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
 const appUrl = () => location.origin + location.pathname;
 
+/* Each sport has its own words, positions, workout types, season stats and (for team sports) line-up formats.
+   Line-up slots are [label, x %, y %] on a portrait pitch or court, with your own goal at the bottom. */
+const LINEUPS = {
+  "f433": { label: "4-3-3", field: "pitch", slots: [["GK",50,90],["LB",14,70],["CB",37,74],["CB",63,74],["RB",86,70],["CM",28,50],["CM",50,54],["CM",72,50],["LW",18,26],["ST",50,19],["RW",82,26]] },
+  "f442": { label: "4-4-2", field: "pitch", slots: [["GK",50,90],["LB",14,70],["CB",37,74],["CB",63,74],["RB",86,70],["LM",14,46],["CM",38,50],["CM",62,50],["RM",86,46],["ST",38,21],["ST",62,21]] },
+  "f4231": { label: "4-2-3-1", field: "pitch", slots: [["GK",50,90],["LB",14,70],["CB",37,74],["CB",63,74],["RB",86,70],["DM",38,56],["DM",62,56],["LW",18,34],["AM",50,36],["RW",82,34],["ST",50,17]] },
+  "f352": { label: "3-5-2", field: "pitch", slots: [["GK",50,90],["CB",28,74],["CB",50,76],["CB",72,74],["LWB",12,48],["CM",32,53],["CM",50,46],["CM",68,53],["RWB",88,48],["ST",38,21],["ST",62,21]] },
+  "f7": { label: "7-a-side (2-3-1)", field: "pitch", slots: [["GK",50,90],["LB",30,70],["RB",70,70],["LM",18,46],["CM",50,50],["RM",82,46],["ST",50,22]] },
+  "f5": { label: "5-a-side (2-2)", field: "pitch", slots: [["GK",50,90],["LB",30,66],["RB",70,66],["LF",32,34],["RF",68,34]] },
+  "b5": { label: "Starting five", field: "bball", slots: [["PG",50,76],["SG",82,60],["SF",18,60],["PF",66,36],["C",36,32]] },
+  "v6": { label: "6 rotation", field: "vball", slots: [["4",20,30],["3",50,30],["2",80,30],["5",20,70],["6",50,70],["1",80,70]] },
+  "h7": { label: "7 players", field: "hball", slots: [["GK",50,90],["LW",10,40],["LB",28,57],["CB",50,62],["RB",72,57],["RW",90,40],["PV",50,30]] },
+};
 const SPORTS = {
-  football:   { label: "Football",    match: "Match", stats: [["apps", "Apps"], ["goals", "Goals"], ["assists", "Assists"], ["mins", "Minutes"]] },
-  basketball: { label: "Basketball",  match: "Game",  stats: [["games", "Games"], ["pts", "Points"], ["reb", "Rebounds"], ["ast", "Assists"]] },
-  tennis:     { label: "Tennis",      match: "Match", stats: [["matches", "Matches"], ["wins", "Wins"], ["aces", "Aces"], ["sets", "Sets won"]] },
-  gymnastics: { label: "Gymnastics",  match: "Meet",  stats: [["meets", "Meets"], ["best", "Best score"], ["avg", "Avg score"], ["medals", "Medals"]] },
-  other:      { label: "Other sport", match: "Match", stats: [["games", "Games"], ["wins", "Wins"], ["points", "Points"], ["pbs", "Personal bests"]] },
+  football:   { label: "Football", match: "Match", training: "Training", lineups: ["f433", "f442", "f4231", "f352", "f7", "f5"],
+    stats: [["apps", "Apps"], ["goals", "Goals"], ["assists", "Assists"], ["mins", "Minutes"]],
+    positions: ["Goalkeeper", "Right back", "Centre back", "Left back", "Defensive mid", "Central mid", "Attacking mid", "Right wing", "Left wing", "Striker"],
+    workouts: ["Team training", "Gym", "Run", "Skills", "Recovery", "Match", "Other"] },
+  basketball: { label: "Basketball", match: "Game", training: "Practice", lineups: ["b5"],
+    stats: [["games", "Games"], ["pts", "Points"], ["reb", "Rebounds"], ["ast", "Assists"]],
+    positions: ["Point guard", "Shooting guard", "Small forward", "Power forward", "Center"],
+    workouts: ["Team practice", "Shooting", "Gym", "Conditioning", "Recovery", "Game", "Other"] },
+  volleyball: { label: "Volleyball", match: "Match", training: "Training", lineups: ["v6"],
+    stats: [["matches", "Matches"], ["kills", "Kills"], ["blocks", "Blocks"], ["aces", "Aces"]],
+    positions: ["Setter", "Outside hitter", "Opposite", "Middle blocker", "Libero"],
+    workouts: ["Team training", "Serving", "Gym", "Jump training", "Recovery", "Match", "Other"] },
+  handball:   { label: "Handball", match: "Match", training: "Training", lineups: ["h7"],
+    stats: [["apps", "Apps"], ["goals", "Goals"], ["assists", "Assists"], ["saves", "Saves"]],
+    positions: ["Goalkeeper", "Left wing", "Left back", "Centre back", "Right back", "Right wing", "Pivot"],
+    workouts: ["Team training", "Shooting", "Gym", "Run", "Recovery", "Match", "Other"] },
+  tennis:     { label: "Tennis", match: "Match", training: "Lesson",
+    stats: [["matches", "Matches"], ["wins", "Wins"], ["aces", "Aces"], ["sets", "Sets won"]],
+    positions: ["Singles", "Doubles", "Singles and doubles"],
+    workouts: ["Court session", "Private lesson", "Fitness", "Footwork", "Recovery", "Match", "Other"] },
+  gymnastics: { label: "Gymnastics", match: "Meet", training: "Training",
+    stats: [["meets", "Meets"], ["best", "Best score"], ["avg", "Avg score"], ["medals", "Medals"]],
+    positions: ["Vault", "Bars", "Beam", "Floor", "All-around"],
+    workouts: ["Gym training", "Strength", "Flexibility", "Conditioning", "Recovery", "Meet", "Other"] },
+  swimming:   { label: "Swimming", match: "Gala", training: "Swim session",
+    stats: [["races", "Races"], ["pbs", "Personal bests"], ["medals", "Medals"], ["km", "Km swum"]],
+    positions: ["Freestyle", "Backstroke", "Breaststroke", "Butterfly", "Medley"],
+    workouts: ["Pool session", "Dryland", "Gym", "Mobility", "Recovery", "Gala", "Other"] },
+  athletics:  { label: "Athletics", match: "Meet", training: "Training",
+    stats: [["meets", "Meets"], ["pbs", "Personal bests"], ["medals", "Medals"], ["best", "Best result"]],
+    positions: ["Sprints", "Middle distance", "Long distance", "Hurdles", "Jumps", "Throws"],
+    workouts: ["Track session", "Gym", "Run", "Mobility", "Recovery", "Meet", "Other"] },
+  other:      { label: "Other sport", match: "Match", training: "Training",
+    stats: [["games", "Games"], ["wins", "Wins"], ["points", "Points"], ["pbs", "Personal bests"]],
+    positions: [], workouts: ["Team training", "Gym", "Run", "Skills", "Recovery", "Match", "Other"] },
 };
 const sport = () => SPORTS[S.club?.sport] || SPORTS.other;
+const sessLabel = s => s.kind === "match" ? sport().match : sport().training;
+const posList = () => el("datalist", { id: "pos-list" }, sport().positions.map(x => el("option", { value: x })));
 const MEALS = ["Breakfast", "Lunch", "Dinner", "Snack", "Pre-session", "Recovery"];
-const WORKOUTS = ["Team training", "Gym", "Run", "Skills", "Recovery", "Match", "Other"];
 const STATUS = [["present", "Present"], ["late", "Late"], ["absent", "Absent"], ["excused", "Excused"]];
 
 /* ---------- state ---------- */
@@ -438,12 +482,18 @@ function waInvite() {
     `انضم إلى ${c} على Touchline Team 👋\nافتح الرابط للانضمام للفريق:\n${joinLink()}\n\nأو سجّل على touchlineteam.com واكتب كود النادي: ${code}`);
 }
 function waSession(s) {
-  const kind = s.kind === "match" ? L(sport().match, "مباراة") : L("Training", "تمرين");
+  const kind = inAr() && window.tlT ? window.tlT(sessLabel(s)) : sessLabel(s);
   const when = [longDay(s.date), timeRange(s)].filter(Boolean).join(" · ");
   return L(`⚽ ${S.club?.name || ""}\n${kind}: ${s.title}\n📅 ${when}${s.location ? "\n📍 " + s.location : ""}\n\nTell me if you’re coming in Touchline Team: ${appUrl()}${inAr() ? "?lang=ar" : ""}`,
     `⚽ ${S.club?.name || ""}\n${kind}: ${s.title}\n📅 ${when}${s.location ? "\n📍 " + s.location : ""}\n\nقولّي هتيجي ولا لأ على Touchline Team: ${appUrl()}?lang=ar`);
 }
 function waAnn(a) {
+  if (a.kind === "lineup" && LINEUPS[a.format]) {
+    const f = LINEUPS[a.format]; const nm = id => { const m = byId(id); return m ? `${m.number ? "#" + m.number + " " : ""}${m.name}` : ""; };
+    const xi = f.slots.map(([lab], i) => a.slots?.[i] ? `${lab}: ${nm(a.slots[i])}` : null).filter(Boolean);
+    const subs = (a.bench || []).map(nm).filter(Boolean);
+    return `📣 ${a.title}\n${f.label}\n\n${xi.join("\n")}${subs.length ? "\n\n" + say("Subs", "الاحتياط") + ": " + subs.join(", ") : ""}${a.body ? "\n\n" + a.body : ""}\n\n— ${S.club?.name || ""} · Touchline Team`;
+  }
   const squad = (a.squad || []).map(byId).filter(Boolean).sort((x, y) => numOr(x.number) - numOr(y.number)).map(m => `${m.number ? "#" + m.number + " " : ""}${m.name}`);
   return `📣 ${a.title}${a.body ? "\n" + a.body : ""}${squad.length ? "\n\n" + squad.join("\n") : ""}\n\n— ${S.club?.name || ""} · Touchline Team`;
 }
@@ -461,7 +511,7 @@ function icsText(sessions) {
   const url = appUrl() + (inAr() ? "?lang=ar" : "");
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Touchline Team//Schedule//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:" + esc2(club)];
   sessions.forEach(x => {
-    const kind = x.kind === "match" ? say(sport().match, "مباراة") : say("Training", "تمرين");
+    const kind = inAr() && window.tlT ? window.tlT(sessLabel(x)) : sessLabel(x);
     lines.push("BEGIN:VEVENT", `UID:${x.id}-${S.clubId || "demo"}@touchlineteam.com`, "DTSTAMP:" + stamp);
     if (x.time) {
       const [h, m] = x.time.split(":").map(Number); const start = dObj(x.date); start.setHours(h, m || 0, 0, 0);
@@ -487,7 +537,7 @@ function downloadIcs(sessions, name) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 function googleCalUrl(x) {
-  const kind = x.kind === "match" ? say(sport().match, "مباراة") : say("Training", "تمرين");
+  const kind = inAr() && window.tlT ? window.tlT(sessLabel(x)) : sessLabel(x);
   let dates;
   if (x.time) { const [h, m] = x.time.split(":").map(Number); const st = dObj(x.date); st.setHours(h, m || 0, 0, 0); const en = new Date(st.getTime() + sessMinutes(x) * 60000);
     const f = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`; dates = f(st) + "/" + f(en); }
@@ -850,7 +900,7 @@ function nextCard(s, coach) {
   if (coach) { const c = rsvpCounts(s); extra = el("div", { class: "m" }, `${c.inN} available · ${c.outN} can’t make it · ${c.none} no reply`); }
   return el("div", { class: "next" },
     el("div", { class: "date" }, el("div", { class: "d" }, d.getDate()), el("div", { class: "w" }, d.toLocaleDateString(undefined, { weekday: "short" }))),
-    el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match + " day" : "Training"), el("span", { class: "m" }, rel(s.date))), el("h3", {}, s.title), el("div", { class: "m" }, [timeRange(s), s.location].filter(Boolean).join(" · ")), extra,
+    el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match + " day" : sport().training), el("span", { class: "m" }, rel(s.date))), el("h3", {}, s.title), el("div", { class: "m" }, [timeRange(s), s.location].filter(Boolean).join(" · ")), extra,
       !coach ? el("div", { class: "m" }, mine ? (mine.going ? "You said you’ll be there" : "You said you can’t make it" + (mine.reason ? `: ${mine.reason}` : "")) : "Let your coach know if you’re coming") : null),
     coach ? el("div", { class: "row" }, el("button", { class: "btn", onclick: () => takeAttendance(s) }, "Take register"), waBtn(waSession(s), "WhatsApp", "btn"), calBtn([s], { cls: "btn on-dark", label: "Calendar" })) : el("div", { class: "row" }, el("button", { class: "btn", onclick: () => A.setRsvp(s, true, "") }, "I’ll be there"), el("button", { class: "btn", style: "background:transparent;color:inherit;border-color:currentColor", onclick: () => cantMake(s) }, "Can’t make it"), calBtn([s], { cls: "btn on-dark", label: "Calendar" })));
 }
@@ -993,7 +1043,7 @@ function registerList(id) {
   const r = register(id, 10);
   if (!r.length) return el("div", { class: "empty" }, "No attendance recorded yet.");
   const cls = { present: "good", late: "warn", absent: "bad", excused: "" };
-  return el("ul", { class: "list" }, r.map(({ s, a }) => el("li", {}, el("div", { class: "li-main" }, el("div", { class: "t" }, s.title), el("div", { class: "muted", style: "font-size:13px" }, `${fmtDay(s.date)} · ${s.kind === "match" ? sport().match : "Training"}`)),
+  return el("ul", { class: "list" }, r.map(({ s, a }) => el("li", {}, el("div", { class: "li-main" }, el("div", { class: "t" }, s.title), el("div", { class: "muted", style: "font-size:13px" }, `${fmtDay(s.date)} · ${sessLabel(s)}`)),
     a.rating ? el("span", { class: "chip" }, "★ " + a.rating) : null, el("span", { class: "pill " + cls[a.status] }, a.status))));
 }
 function planCard(pl, asCoach) {
@@ -1160,7 +1210,7 @@ function addLog(type) {
   if (locked()) { toast(lockedMsg()); return; }
   if (type === "meal") return addMeal();
   modal("Log a workout", [
-    el("div", { class: "fields2" }, field("Type", sel("f-kind", "kind", WORKOUTS, "Gym")), field("Date", el("input", { id: "f-date", type: "date", name: "date", value: TODAY, max: TODAY, required: true })), field("Minutes", el("input", { id: "f-dur", type: "number", name: "duration", min: 1, max: 600, value: 45, required: true }))),
+    el("div", { class: "fields2" }, field("Type", sel("f-kind", "kind", sport().workouts, sport().workouts[0])), field("Date", el("input", { id: "f-date", type: "date", name: "date", value: TODAY, max: TODAY, required: true })), field("Minutes", el("input", { id: "f-dur", type: "number", name: "duration", min: 1, max: 600, value: 45, required: true }))),
     field("Notes (optional)", el("textarea", { id: "f-notes", name: "notes", maxlength: 400, placeholder: "e.g. 5×5 squats at 80 kg, felt strong" })),
   ], { submit: async fd => {
     const d = Object.fromEntries(fd.entries()); const date = d.date && d.date <= TODAY ? d.date : TODAY;
@@ -1296,13 +1346,14 @@ function quickLog() {
 function vHome() {
   const m = me(); const next = upcoming()[0]; const instr = openInstr(m.id);
   const plans = S.plans.filter(p => p.uid === m.id && (p.items || []).some((_, i) => !(p.ticks || [])[i])).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-  const squadAnn = [...S.announcements].filter(a => a.kind === "squad").sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  const squadAnn = [...S.announcements].filter(a => a.kind === "squad" || a.kind === "lineup").sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
   const inSquad = squadAnn && (squadAnn.squad || []).includes(m.id);
+  const starting = squadAnn?.kind === "lineup" && Object.values(squadAnn.slots || {}).includes(m.id);
   const todayLogs = logsOf(m.id).filter(l => l.date === TODAY); const hr = new Date().getHours();
   return [
     el("div", {}, el("div", { class: "label" }, dObj(TODAY).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })), el("h2", { style: "font-size:32px" }, `${hr < 12 ? "Morning" : hr < 18 ? "Afternoon" : "Evening"}, ${m.name.split(" ")[0]}`)),
     instr.length ? el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "From your coach"), el("span", { class: "pill bad" }, instr.length + " new")), el("div", { class: "stack" }, instr.map(x => fbCard(x, false)))) : null,
-    squadAnn ? el("div", { class: "banner", style: inSquad ? "background:var(--card);border-color:#1d1600;color:#1d1600" : "" }, el("p", {}, el("b", { style: inSquad ? "color:#1d1600" : "" }, inSquad ? "You’re in the squad" : "Squad announced"), squadAnn.title), el("button", { class: "btn", onclick: () => go("board") }, "See squad")) : null,
+    squadAnn ? el("div", { class: "banner", style: inSquad ? "background:var(--card);border-color:#1d1600;color:#1d1600" : "" }, el("p", {}, el("b", { style: inSquad ? "color:#1d1600" : "" }, starting ? "You’re starting" : inSquad ? "You’re in the squad" : squadAnn.kind === "lineup" ? "Line-up announced" : "Squad announced"), squadAnn.title), el("button", { class: "btn", onclick: () => go("board") }, squadAnn.kind === "lineup" ? "See line-up" : "See squad")) : null,
     nextCard(next, false),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Today’s food"), el("span", { class: "muted" }, Object.keys(targetsOf(m.id)).length ? "Your targets are set by your coach" : "")), foodToday(m.id), el("div", { style: "margin-top:14px" }, quickLog()), todayLogs.length ? el("div", { style: "margin-top:8px" }, logList(todayLogs, !S.preview)) : null),
     el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Your plan"), el("button", { class: "btn small ghost", onclick: () => go("me") }, "All plans")), plans.length ? el("div", { class: "stack" }, plans.map(p => planCard(p, false))) : el("div", { class: "empty" }, "All caught up. No open plan items.")),
@@ -1345,7 +1396,7 @@ function editMember(m, self) {
   const canRemove = !self && isCoach() && m.id !== ownerUid && m.id !== me().id && (m.role === "player" || isOwner() || S.demo);
   modal(self ? "My details" : "Edit " + m.name, [
     field("Full name", el("input", { id: "m-name", name: "name", required: true, value: m.name || "", maxlength: 60 })),
-    el("div", { class: "fields2" }, field("Shirt number", el("input", { id: "m-num", name: "number", type: "number", min: 0, max: 999, value: m.number ?? "" })), field(m.role === "coach" ? "Title" : "Position or event", el("input", { id: "m-pos", name: "position", value: m.position || "", maxlength: 40 }))),
+    el("div", { class: "fields2" }, field("Shirt number", el("input", { id: "m-num", name: "number", type: "number", min: 0, max: 999, value: m.number ?? "" })), field(m.role === "coach" ? "Title" : "Position or event", el("input", { id: "m-pos", name: "position", value: m.position || "", maxlength: 40, list: m.role === "coach" ? null : "pos-list" }))), m.role === "coach" ? null : posList(),
     canRole ? el("div", { class: "field" }, el("span", {}, "Role"), seg("role", [["player", "Player"], ["coach", "Coach (sees everyone’s data)"]], m.role)) : null,
   ], { extra: canRemove ? el("button", { type: "button", class: "btn ghost danger", style: "margin-right:auto", onclick: () => confirmDel(`Remove ${m.name} from the club? They lose access straight away. Their past logs stay saved.`, () => A.removeMember(m), "Remove") }, "Remove") : null,
     submit: async fd => {
@@ -1388,7 +1439,7 @@ function sessRow(s, coach) {
   const att = !coach && S.att[s.id]?.[me().id]; const r = !coach && rsvpOf(s.id, me().id);
   return el("div", { class: "sess" },
     el("div", { class: "date" }, el("div", { class: "d" }, d.getDate()), el("div", { class: "w" }, d.toLocaleDateString(undefined, { month: "short" }))),
-    el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, s.kind === "match" ? sport().match : "Training"), el("b", {}, s.title)),
+    el("div", { class: "info" }, el("div", { class: "row" }, el("span", { class: "pill " + (s.kind === "match" ? "match" : "") }, sessLabel(s)), el("b", {}, s.title)),
       el("div", { class: "muted", style: "font-size:13px" }, [rel(s.date), timeRange(s), s.location].filter(Boolean).join(" · ")),
       coach ? el("div", { style: "font-size:13px;color:" + (isPast && !s.taken ? "var(--warn)" : "var(--muted)") }, summary) : null),
     att ? el("span", { class: "pill " + ({ present: "good", late: "warn", absent: "bad" }[att.status] || "") }, att.status) : null,
@@ -1406,7 +1457,7 @@ function vSchedule() {
   ];
 }
 function editSession(s) {
-  const kindSeg = seg("kind", [["training", "Training"], ["match", sport().match]], s?.kind || "training");
+  const kindSeg = seg("kind", [["training", sport().training], ["match", sport().match]], s?.kind || "training");
   const durSel = sel("se-dur", "duration", [["45", "45 min"], ["60", "1 hour"], ["75", "1 h 15 min"], ["90", "1 h 30 min"], ["105", "1 h 45 min"], ["120", "2 hours"], ["150", "2 h 30 min"], ["180", "3 hours"], ["240", "4 hours"]], String(s ? sessMinutes(s) : 90));
   let durTouched = !!s?.duration; durSel.addEventListener("change", () => (durTouched = true));
   kindSeg.addEventListener("change", e => { if (!durTouched) durSel.value = e.target.value === "match" ? "120" : "90"; });
@@ -1445,29 +1496,87 @@ function vBoard() {
   const coach = isCoach(); const list = [...S.announcements].sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const ups = !coach ? sessionsSorted().filter(s => s.date >= TODAY).slice(0, 8) : [];
   return [
-    el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Team board"), coach ? el("button", { class: "btn primary small", onclick: postAnn }, "Post") : null),
+    el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Team board"), coach ? el("div", { class: "row" }, (sport().lineups || []).length ? el("button", { class: "btn small", onclick: () => postAnn("lineup") }, "New line-up") : null, el("button", { class: "btn primary small", onclick: () => postAnn() }, "Post")) : null),
       list.length ? el("div", { class: "stack" }, list.map(a => annCard(a, coach))) : el("div", { class: "empty" }, coach ? "Nothing posted yet. Post a notice or a match-day squad." : "No announcements yet.")),
     !coach ? el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h3", {}, "Schedule"), ups.length ? calBtn(sessionsSorted().filter(s => s.date >= TODAY), { label: "Add all to calendar" }) : el("span", { class: "muted" }, "Tell your coach if you can make it")), ups.length ? el("div", {}, ups.map(s => sessRow(s, false))) : el("div", { class: "empty" }, "Nothing scheduled.")) : null,
   ];
 }
 function annCard(a, coach) {
-  const squad = (a.squad || []).map(byId).filter(Boolean).sort((x, y) => numOr(x.number) - numOr(y.number));
-  return el("article", { class: "ann " + (a.kind === "squad" ? "squad" : "") },
-    el("div", { class: "row" }, el("span", { class: "pill " + (a.kind === "squad" ? "match" : "") }, a.kind === "squad" ? sport().match + "-day squad" : "Notice"), el("span", { class: "muted", style: "font-size:12px" }, `${a.author || "Coach"} · ${rel(a.date)}`)),
+  const lu = a.kind === "lineup" && LINEUPS[a.format];
+  const squad = (lu ? (a.bench || []) : (a.squad || [])).map(byId).filter(Boolean).sort((x, y) => numOr(x.number) - numOr(y.number));
+  return el("article", { class: "ann " + (a.kind === "squad" || lu ? "squad" : "") },
+    el("div", { class: "row" }, el("span", { class: "pill " + (a.kind === "squad" || lu ? "match" : "") }, lu ? sport().match + " line-up" : a.kind === "squad" ? sport().match + "-day squad" : "Notice"), el("span", { class: "muted", style: "font-size:12px" }, `${a.author || "Coach"} · ${rel(a.date)}`)),
     el("h3", {}, a.title), a.body ? el("p", {}, a.body) : null,
+    lu ? el("div", { class: "lu-wrap" }, lineupField(a.format, a.slots || {}, null, null), el("div", { class: "muted", style: "font-size:12px;margin-top:6px" }, lu.label)) : null,
+    lu && squad.length ? el("div", { class: "label", style: "margin-top:10px" }, "Subs") : null,
     squad.length ? el("div", { class: "chips" }, squad.map(m => el("span", { class: "sqchip" + (m.id === me().id ? " me" : "") }, el("i", {}, m.number || "–"), m.name))) : null,
     coach ? el("div", { class: "row", style: "margin-top:8px" }, waBtn(waAnn(a)), el("button", { class: "btn small ghost danger", onclick: () => confirmDel("Delete this post?", () => A.deleteAnn(a)) }, "Delete")) : null);
 }
-function postAnn() {
+function postAnn(startKind) {
   const box = el("div", { class: "field", hidden: true }, el("span", {}, "Squad"), el("div", { class: "checks" }, players().map(p => el("label", {}, el("input", { type: "checkbox", name: "squad", value: p.id }), `#${p.number || "–"} ${p.name}`))));
-  const kind = seg("kind", [["general", "Notice"], ["squad", sport().match + "-day squad"]], "general");
-  kind.addEventListener("change", e => (box.hidden = e.target.value !== "squad"));
+  const fmts = sport().lineups || [];
+  const lu = { format: fmts[0], slots: {}, bench: new Set(), cur: 0 };
+  const luBox = el("div", { class: "field", hidden: true });
+  const drawLu = () => luBox.replaceChildren(lineupBuilder(lu, drawLu));
+  const opts = [["general", "Notice"], ["squad", sport().match + "-day squad"]]; if (fmts.length) opts.push(["lineup", "Line-up"]);
+  const kind = seg("kind", opts, startKind || "general");
+  const nextM = upcoming().find(x => x.kind === "match");
+  const title = el("input", { id: "a-title", name: "title", required: true, maxlength: 120, placeholder: "e.g. Squad for Saturday vs Northgate" });
+  const sync = k => { box.hidden = k !== "squad"; luBox.hidden = k !== "lineup"; if (k === "lineup") { drawLu(); if (!title.value) title.value = `Line-up${nextM ? " " + nextM.title : ""}`; } };
+  kind.addEventListener("change", e => sync(e.target.value));
   modal("Post to the team", [el("div", { class: "field" }, el("span", {}, "Type"), kind),
-    field("Title", el("input", { id: "a-title", name: "title", required: true, maxlength: 120, placeholder: "e.g. Squad for Saturday vs Northgate" })),
-    field("Details", el("textarea", { id: "a-body", name: "body", maxlength: 3000, placeholder: "e.g. Meet 9:45 at the clubhouse. Bring home and away kit." })), box],
-    { label: "Post", submit: fd => { const k = fd.get("kind"); const squad = k === "squad" ? fd.getAll("squad") : [];
+    field("Title", title),
+    field("Details", el("textarea", { id: "a-body", name: "body", maxlength: 3000, placeholder: "e.g. Meet 9:45 at the clubhouse. Bring home and away kit." })), box, luBox],
+    { label: "Post", submit: fd => { const k = fd.get("kind");
+      if (k === "lineup") {
+        const slots = {}; Object.entries(lu.slots).forEach(([i, uid]) => { if (uid) slots[i] = uid; });
+        if (!Object.keys(slots).length) { toast("Put at least one player in the line-up"); return false; }
+        const bench = [...lu.bench].filter(id => !Object.values(slots).includes(id));
+        return A.postAnn({ kind: "lineup", title: fd.get("title").trim(), body: fd.get("body").trim(), format: lu.format, slots, bench, squad: [...Object.values(slots), ...bench] });
+      }
+      const squad = k === "squad" ? fd.getAll("squad") : [];
       if (k === "squad" && !squad.length) { toast("Pick the players in the squad"); return false; }
       return A.postAnn({ kind: k, title: fd.get("title").trim(), body: fd.get("body").trim(), squad }); } });
+  sync(startKind || "general");
+}
+/* line-up: a pitch or court with tappable positions */
+function fieldSvg(kind) {
+  const L = 'fill="none" stroke="rgba(255,255,255,.85)" stroke-width=".7"';
+  if (kind === "bball") return `<svg viewBox="0 0 100 130" preserveAspectRatio="none"><rect width="100" height="130" fill="#C98B4E"/><g ${L}><rect x="4" y="4" width="92" height="122"/><rect x="33" y="78" width="34" height="48"/><circle cx="50" cy="78" r="12"/><path d="M8 126 L8 100 A44 44 0 0 1 92 100 L92 126"/><path d="M38 4 A12 12 0 0 0 62 4"/><circle cx="50" cy="118" r="2.2"/></g></svg>`;
+  if (kind === "vball") return `<svg viewBox="0 0 100 130" preserveAspectRatio="none"><rect width="100" height="130" fill="#E0823A"/><g ${L}><rect x="6" y="8" width="88" height="116"/><line x1="6" y1="46" x2="94" y2="46"/></g><rect x="2" y="5" width="96" height="3" fill="#fff"/></svg>`;
+  if (kind === "hball") return `<svg viewBox="0 0 100 130" preserveAspectRatio="none"><rect width="100" height="130" fill="#2F6DB5"/><g ${L}><rect x="4" y="4" width="92" height="122"/><path d="M14 126 A36 30 0 0 1 86 126"/><path d="M4 126 A46 44 0 0 1 96 126" stroke-dasharray="2 2"/><line x1="4" y1="4" x2="96" y2="4"/></g><rect x="42" y="124" width="16" height="3" fill="#fff"/></svg>`;
+  let st = ""; for (let i = 0; i < 10; i++) st += `<rect x="0" y="${i * 13}" width="100" height="6.5" fill="rgba(255,255,255,.05)"/>`;
+  return `<svg viewBox="0 0 100 130" preserveAspectRatio="none"><rect width="100" height="130" fill="#3E8A35"/>${st}<g ${L}><rect x="4" y="4" width="92" height="122"/><line x1="4" y1="65" x2="96" y2="65"/><circle cx="50" cy="65" r="9"/><rect x="24" y="104" width="52" height="22"/><rect x="38" y="118" width="24" height="8"/><rect x="24" y="4" width="52" height="22"/><rect x="38" y="4" width="24" height="8"/></g></svg>`;
+}
+const surname = m => { const w = (m?.name || "").trim().split(/\s+/); return w.length > 1 ? w[w.length - 1] : w[0] || ""; };
+function lineupField(fmtId, slots, curIdx, onSlot) {
+  const f = LINEUPS[fmtId]; if (!f) return null;
+  return el("div", { class: "lu-field", html: fieldSvg(f.field) }, f.slots.map(([lab, x, y], i) => {
+    const m = byId(slots[i]); const mine = m && me() && m.id === me().id;
+    const inner = [el("span", { class: "lu-dot" + (m ? " on" : "") + (mine ? " me" : "") + (curIdx === i ? " cur" : "") }, m ? String(m.number ?? initials(m.name)) : "+"), el("span", { class: "lu-name" }, m ? surname(m) : lab)];
+    return onSlot ? el("button", { type: "button", class: "lu-slot", style: `left:${x}%;top:${y}%`, "aria-label": lab + (m ? ": " + m.name : ""), onclick: () => onSlot(i) }, inner)
+                  : el("div", { class: "lu-slot", style: `left:${x}%;top:${y}%` }, inner);
+  }));
+}
+function lineupBuilder(lu, redraw) {
+  const fmts = sport().lineups || []; const f = LINEUPS[lu.format];
+  const assigned = new Set(Object.values(lu.slots).filter(Boolean));
+  const fmtSel = sel("lu-fmt", "lu-fmt", fmts.map(k => [k, LINEUPS[k].label]), lu.format);
+  fmtSel.addEventListener("change", () => { lu.format = fmtSel.value; const keep = Object.values(lu.slots).filter(Boolean); lu.slots = {}; keep.slice(0, LINEUPS[lu.format].slots.length).forEach((id, i) => (lu.slots[i] = id)); lu.cur = 0; redraw(); });
+  const pick = id => {
+    Object.keys(lu.slots).forEach(k => { if (lu.slots[k] === id) delete lu.slots[k]; });
+    lu.slots[lu.cur] = id; lu.bench.delete(id);
+    const next = f.slots.findIndex((_, i) => !lu.slots[i]); lu.cur = next < 0 ? lu.cur : next; redraw();
+  };
+  const cur = f.slots[lu.cur];
+  return el("div", { class: "stack", style: "gap:10px" },
+    fmts.length > 1 ? field("Formation", fmtSel) : el("div", { class: "muted" }, f.label),
+    el("div", { class: "lu-wrap" }, lineupField(lu.format, lu.slots, lu.cur, i => { lu.cur = i; redraw(); })),
+    el("div", { class: "row", style: "justify-content:space-between" }, el("b", {}, `Pick a player for ${cur ? cur[0] : ""}`), lu.slots[lu.cur] ? el("button", { type: "button", class: "btn small ghost", onclick: () => { delete lu.slots[lu.cur]; redraw(); } }, "Clear") : null),
+    el("div", { class: "lu-picks" }, players().map(p => { const at = Object.keys(lu.slots).find(k => lu.slots[k] === p.id);
+      return el("button", { type: "button", class: "lu-pick" + (at != null ? " used" : ""), onclick: () => pick(p.id) }, el("i", {}, p.number ?? "–"), p.name, at != null ? el("small", {}, f.slots[at][0]) : null); })),
+    el("div", { class: "label" }, "Subs"),
+    el("div", { class: "lu-picks" }, players().filter(p => !assigned.has(p.id)).map(p => el("button", { type: "button", class: "lu-pick" + (lu.bench.has(p.id) ? " bench" : ""), onclick: () => { lu.bench.has(p.id) ? lu.bench.delete(p.id) : lu.bench.add(p.id); redraw(); } }, el("i", {}, p.number ?? "–"), p.name, lu.bench.has(p.id) ? el("small", {}, "Sub") : null))));
 }
 
 /* ---------- club settings ---------- */
@@ -1734,6 +1843,7 @@ function demoData() {
   const rsvp = {};
   if (upcomingOf(sessions)) { const s = upcomingOf(sessions); rsvp[s.id] = { p1: { going: true }, p2: { going: true }, p4: { going: true }, p6: { going: true }, p7: { going: true }, p3: { going: false, reason: "School exam" } }; }
   const announcements = [
+    { id: "a0", kind: "lineup", format: "f7", title: `Line-up ${nextMatch ? nextMatch.title : ""}`.trim(), body: "Kick-off 11:00. Same shape as last week: stay compact and press on their goal kicks.", slots: { 0: "p1", 1: "p3", 2: "p2", 3: "p5", 4: "p6", 5: "p8", 6: "p9" }, bench: ["p7", "p4"], squad: ["p1", "p3", "p2", "p5", "p6", "p8", "p9", "p7", "p4"], author: "Dana Reyes", date: TODAY, ts: 4 },
     { id: "a1", kind: "squad", title: `Squad for ${nextMatch ? nextMatch.title + ", " + rel(nextMatch.date) : "the next match"}`, body: "Meet 9:45 at the clubhouse. Bring both kits and shin pads. Remy, come and see me before the warm-up.", squad: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p9"], author: "Dana Reyes", date: addDays(TODAY, -1), ts: 3 },
     { id: "a2", kind: "general", title: "New training kit collection", body: "Kit is in. Collect yours from the clubhouse after Tuesday’s session. Sizes are on the sheet by the door.", squad: [], author: "Marco Lind", date: addDays(TODAY, -3), ts: 2 },
     { id: "a3", kind: "general", title: "Hydration reminder for the heat", body: "Aim for 2.5–3 L a day this week and drink 500 ml in the two hours before training.", squad: [], author: "Dana Reyes", date: addDays(TODAY, -6), ts: 1 }];
